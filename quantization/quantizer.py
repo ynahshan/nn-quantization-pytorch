@@ -5,7 +5,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from itertools import count
-from qat.quantization.methods import MinMaxQuantization, LearnedStepSizeQuantization, LearnableDifferentiableQuantization,\
+from quantization.methods import MinMaxQuantization, LearnedStepSizeQuantization, LearnableDifferentiableQuantization,\
                                         KmeansQuantization, LearnedCentroidsQuantization
 from utils.absorb_bn import is_absorbing, is_bn
 
@@ -184,7 +184,7 @@ class ActivationModuleWrapper(nn.Module):
         self.bits_out_inner = 4
         self.enabled = True
         self.active = True
-        self.temperature = kwargs['temperature']
+        self.temperature = kwargs['temperature'] # TODO: pass it directly to Quantization as kwargs
 
         if self.bits_out_outer is not None:
             # self.out_quantization_inner_default = LearnedStepQuantization(self, self.bits_out_inner, symmetric=False)
@@ -299,23 +299,19 @@ class QuantizationScheduler(object):
 
 
 class ModelQuantizer:
-    def __init__(self, model, args, quantization_scheduler=None):
+    def __init__(self, model, args, quantizable_layers, replacement_factory, quantization_scheduler=None):
         self.model = model
         self.args = args
         self.bit_weights = args.bit_weights
         self.bit_act = args.bit_act
         self.functor_map = {nn.Conv2d: Conv2dFunctor}
-        self.replacement_factory = {nn.Conv2d: ParameterModuleWrapper,
-                                    nn.ReLU: ActivationModuleWrapper}
+        self.replacement_factory = replacement_factory
 
         self.quantization_scheduler = quantization_scheduler
 
         self.quantization_wrappers = []
         self.quantizable_modules = []
-        all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
-        all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
-        # self.quantizable_layers = ['layer1.0.relu']  # TODO: make it more generic
-        self.quantizable_layers = all_convs[1:]  # TODO: make it more generic
+        self.quantizable_layers = quantizable_layers
         self._pre_process_container(model)
         self._create_quantization_wrappers()
 
@@ -332,7 +328,6 @@ class ModelQuantizer:
             if isinstance(m, nn.BatchNorm2d):
                 m.momentum = 0
 
-
     @staticmethod
     def has_children(module):
         try:
@@ -345,8 +340,8 @@ class ModelQuantizer:
         for qm in self.quantizable_modules:
             # replace module by it's wrapper
             fn = self.functor_map[type(qm.module)](qm.module) if type(qm.module) in self.functor_map else None
-            args = {"bits_out": self.bit_act, "bits_weight": self.bit_weights, "forward_functor": fn,
-                    "temperature": self.args.temperature}
+            args = {"bits_out": self.bit_act, "bits_weight": self.bit_weights, "forward_functor": fn}
+            args.update(vars(self.args))
             if hasattr(qm, 'bn'):
                 args['bn'] = qm.bn
             module_wrapper = self.replacement_factory[type(qm.module)](qm.full_name, qm.module, self.quantization_scheduler,

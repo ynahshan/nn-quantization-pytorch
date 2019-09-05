@@ -17,7 +17,7 @@ import torch.utils.data.distributed
 import torchvision.models as models
 from utils.data import get_dataset
 from utils.preprocess import get_transform
-from qat.quantization.quantizer import ModelQuantizer, QuantizationScheduler
+from quantization.quantizer import ModelQuantizer, QuantizationScheduler
 from pathlib import Path
 from utils.mllog import MLlogger
 from utils.meters import AverageMeter, ProgressMeter, accuracy
