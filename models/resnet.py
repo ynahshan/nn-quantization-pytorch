@@ -1,5 +1,7 @@
 import torch.nn as nn
 import math
+from torchvision.models.utils import load_state_dict_from_url
+from torchvision.models.resnet import model_urls
 
 __all__ = ['resnet']
 
@@ -199,23 +201,32 @@ def resnet(**kwargs):
         num_classes = num_classes or 1000
         depth = depth or 50
         if depth == 18:
-            return ResNet_imagenet(num_classes=num_classes,
+            model = ResNet_imagenet(num_classes=num_classes,
                                    block=BasicBlock, layers=[2, 2, 2, 2])
         if depth == 34:
-            return ResNet_imagenet(num_classes=num_classes,
+            model = ResNet_imagenet(num_classes=num_classes,
                                    block=BasicBlock, layers=[3, 4, 6, 3])
         if depth == 50:
-            return ResNet_imagenet(num_classes=num_classes,
+            model = ResNet_imagenet(num_classes=num_classes,
                                    block=Bottleneck, layers=[3, 4, 6, 3])
         if depth == 101:
-            return ResNet_imagenet(num_classes=num_classes,
+            model = ResNet_imagenet(num_classes=num_classes,
                                    block=Bottleneck, layers=[3, 4, 23, 3])
         if depth == 152:
-            return ResNet_imagenet(num_classes=num_classes,
+            model = ResNet_imagenet(num_classes=num_classes,
                                    block=Bottleneck, layers=[3, 8, 36, 3])
 
     elif dataset == 'cifar10':
         num_classes = num_classes or 10
         depth = depth or 56
-        return ResNet_cifar10(num_classes=num_classes,
+        model = ResNet_cifar10(num_classes=num_classes,
                               block=BasicBlock, depth=depth)
+
+    if 'pretrained' in kwargs:
+        arch = kwargs['arch']
+        progress = kwargs['progress'] if 'progress' in kwargs else True
+        state_dict = load_state_dict_from_url(model_urls[arch],
+                                              progress=progress)
+        model.load_state_dict(state_dict)
+
+    return model

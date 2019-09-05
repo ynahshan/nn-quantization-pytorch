@@ -53,6 +53,7 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate model on validation set')
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     help='use pre-trained model')
+parser.add_argument('--custom_resnet', action='store_true', help='use custom resnet implementation')
 parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu_ids', default=[0], type=int, nargs='+',
@@ -93,8 +94,8 @@ def main_worker(args, ml_logger):
         print("Use GPU: {} for training".format(args.gpu_ids))
 
     # create model
-    if 'resnet' in args.arch and args.dataset == 'cifar10':
-        model = custom_resnet(depth=18, dataset=args.dataset)
+    if 'resnet' in args.arch and args.custom_resnet:
+        model = custom_resnet(arch=args.arch, pretrained=args.pretrained, depth=18, dataset=args.dataset)
     elif args.pretrained:
         print("=> using pre-trained model '{}'".format(args.arch))
         model = models.__dict__[args.arch](pretrained=True)
@@ -146,7 +147,7 @@ def main_worker(args, ml_logger):
         all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
         # self.quantizable_layers = ['layer1.0.relu']  # TODO: make it more generic
         replacement_factory = {nn.ReLU: ActivationModuleWrapperPost}
-        ModelQuantizer(model, args, all_relu[2:3], replacement_factory)
+        ModelQuantizer(model, args, all_relu[1:-1], replacement_factory)
 
     # if args.quantize:
     #     mq.log_quantizer_state(ml_logger, -1)
