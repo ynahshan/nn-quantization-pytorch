@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
 from itertools import count
-from quantization.methods import KmeansQuantization, MinMaxQuantization
+from quantization.methods.non_uniform import KmeansQuantization
+from quantization.methods.uniform import MinMaxQuantization
+from quantization.methods.clipped_uniform import MinimizedMseQuantization
 
 
 class ActivationModuleWrapperPost(nn.Module):
@@ -19,7 +21,7 @@ class ActivationModuleWrapperPost(nn.Module):
             self.out_quantization = self.out_quantization_default = None
 
             def __init_out_quantization__(tensor):
-                self.out_quantization_default = MinMaxQuantization(self, self.bits_out, symmetric=False)
+                self.out_quantization_default = MinimizedMseQuantization(self, tensor, self.bits_out, symmetric=False)
                 self.out_quantization = self.out_quantization_default
 
                 if self.quantization_scheduler is not None:

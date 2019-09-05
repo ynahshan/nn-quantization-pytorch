@@ -5,8 +5,9 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from itertools import count
-from quantization.methods import MinMaxQuantization, LearnedStepSizeQuantization, LearnableDifferentiableQuantization,\
-                                        KmeansQuantization, LearnedCentroidsQuantization
+from quantization.methods.uniform import MinMaxQuantization
+from quantization.methods.clipped_uniform import LearnedStepSizeQuantization
+from quantization.methods.non_uniform import LearnableDifferentiableQuantization, KmeansQuantization, LearnedCentroidsQuantization
 from utils.absorb_bn import is_absorbing, is_bn
 
 
