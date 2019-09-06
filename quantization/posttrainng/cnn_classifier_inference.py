@@ -15,6 +15,7 @@ import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.models as models
+import numpy as np
 from utils.data import get_dataset
 from utils.preprocess import get_transform
 from quantization.quantizer import ModelQuantizer
@@ -54,7 +55,7 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     help='use pre-trained model')
 parser.add_argument('--custom_resnet', action='store_true', help='use custom resnet implementation')
-parser.add_argument('--seed', default=None, type=int,
+parser.add_argument('--seed', default=12345, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu_ids', default=[0], type=int, nargs='+',
                     help='GPU ids to use (e.g 0 1 2 3)')
@@ -66,7 +67,6 @@ parser.add_argument('--bit_weights', '-bw', type=int, help='Number of bits for w
 parser.add_argument('--bit_act', '-ba', type=int, help='Number of bits for activations', default=None)
 
 best_acc1 = 0
-torch.manual_seed(12345)
 
 
 def main():
@@ -74,13 +74,11 @@ def main():
 
     if args.seed is not None:
         random.seed(args.seed)
+        np.random.seed(args.seed)
         torch.manual_seed(args.seed)
+        torch.cuda.manual_seed_all(args.seed)
         cudnn.deterministic = True
-        warnings.warn('You have chosen to seed training. '
-                      'This will turn on the CUDNN deterministic setting, '
-                      'which can slow down your training considerably! '
-                      'You may see unexpected behavior when restarting '
-                      'from checkpoints.')
+        torch.backends.cudnn.benchmark = False
 
     with MLlogger(os.path.join(home, 'mxt-sim/mllog_runs'), args.experiment, args,
                   name_args=[args.arch, args.dataset, "W{}A{}".format(args.bit_weights, args.bit_act)]) as ml_logger:

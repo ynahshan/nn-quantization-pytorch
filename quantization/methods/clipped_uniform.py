@@ -52,17 +52,25 @@ class MinimizedMseQuantization(MinMaxQuantization):
         t_q = self.__quantize__(tensor, self.alpha)
         return t_q
 
+    def __repr__(self):
+        return 'MinimizedMseQuantization - [bits: {}, symmetric: {}, alpha: {:.4f}]'.format(self.num_bits, self.symmetric, getattr(self, self.alpha_param_name).item())
+
     def mse_direct(self, alpha, x):
         if alpha > 0:
-            xq = self.__quantize__(x, alpha)
-            mse = torch.nn.MSELoss()(x, xq)
+            N = x[x != 0].numel()
+            xclamp = torch.clamp(x, -alpha, alpha)
+            clip_err = torch.sum((xclamp - x) ** 2) / N
+
+            xq = self.__quantize__(xclamp, alpha)
+            quant_err = torch.sum((xq - x) ** 2) / N
+            err = clip_err + quant_err
         else:
-            mse = torch.norm(x) ** 2 / x.numel()
-        return mse.cpu().numpy()
+            err = torch.sum(x**2) / x.numel()
+        return err.cpu().numpy()
 
     def mse_clip_qest_relu(self, alpha, x):
-        N = x[x > 0].numel()
+        N = x[x != 0].numel()
         clip_err = torch.sum((torch.clamp(x, -alpha, alpha) - x) ** 2) / N
-        quant_err = alpha ** 2 / (12 * (2 ** (2 * self.num_bits)))
+        quant_err = alpha ** 2 / ((3 if self.symmetric else 12) * (2 ** (2 * self.num_bits)))
         err = clip_err + quant_err
         return err.cpu().numpy()

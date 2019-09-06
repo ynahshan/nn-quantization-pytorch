@@ -27,6 +27,8 @@ class ActivationModuleWrapperPost(nn.Module):
                 if self.quantization_scheduler is not None:
                     self.quantization_scheduler.add_quantization_params(self.out_quantization.optim_parameters())
 
+                print("ActivationModuleWrapperPost - {} | {} | {}".format(self.name, str(self.out_quantization), str(tensor.device)))
+
             self.out_quantization_init_fn = __init_out_quantization__
 
             if self.quantization_scheduler is not None:

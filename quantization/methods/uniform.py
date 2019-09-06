@@ -67,7 +67,7 @@ class MinMaxQuantization(QuantizationBase):
             self.qmin = 0
 
     def __quantize__(self, tensor, alpha):
-        delta = (2 * alpha) / self.num_bins
+        delta = (2 if self.symmetric else 1) * alpha / (self.num_bins - 1)
 
         # quantize
         t_q = tensor / delta
