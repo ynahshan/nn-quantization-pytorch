@@ -5,7 +5,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from itertools import count
-from quantization.methods.uniform import MinMaxQuantization
+from quantization.methods.uniform import UniformQuantization
 from quantization.methods.clipped_uniform import LearnedStepSizeQuantization
 from quantization.methods.non_uniform import LearnableDifferentiableQuantization, KmeansQuantization, LearnedCentroidsQuantization
 from utils.absorb_bn import is_absorbing, is_bn
@@ -96,7 +96,7 @@ class ParameterModuleWrapper(nn.Module):
                 self.quantization_scheduler.add_quantization_params(self.weight_quantization.optim_parameters())
 
         if self.bit_weights is not None:
-            self.inner_quantization = MinMaxQuantization(self, 8, symmetric=True)
+            self.inner_quantization = UniformQuantization(self, self.weight, 8, symmetric=True)
             if self.quantization_scheduler is not None:
                 self.quantization_scheduler.add_quantization_params(self.inner_quantization.optim_parameters())
 

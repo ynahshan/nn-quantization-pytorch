@@ -2,8 +2,17 @@ import torch
 import torch.nn as nn
 from itertools import count
 from quantization.methods.non_uniform import KmeansQuantization
-from quantization.methods.uniform import MinMaxQuantization
-from quantization.methods.clipped_uniform import MinimizedMseQuantization
+from quantization.methods.clipped_uniform import MseDirectQuantization, MseDecomposedQuantization, MseQuantEstimatedQuantization
+from quantization.methods.clipped_uniform import MaxAbsStaticQuantization, AciqLaplaceQuantization, AciqGausQuantization
+
+
+quantization_mapping = {'aciq_laplace': AciqLaplaceQuantization,
+                        'aciq_gaus': AciqGausQuantization,
+                        'mse_direct': MseDirectQuantization,
+                        'mse_decomp': MseDecomposedQuantization,
+                        'mse_quant_est': MseQuantEstimatedQuantization,
+                        'max_static': MaxAbsStaticQuantization
+                        }
 
 
 class ActivationModuleWrapperPost(nn.Module):
@@ -13,6 +22,7 @@ class ActivationModuleWrapperPost(nn.Module):
         self.wrapped_module = wrapped_module
         self.quantization_scheduler = quantization_scheduler
         self.bits_out = kwargs['bits_out']
+        self.qtype = kwargs['qtype']
         self.enabled = True
         self.active = True
 
@@ -21,7 +31,7 @@ class ActivationModuleWrapperPost(nn.Module):
             self.out_quantization = self.out_quantization_default = None
 
             def __init_out_quantization__(tensor):
-                self.out_quantization_default = MinimizedMseQuantization(self, tensor, self.bits_out, symmetric=False)
+                self.out_quantization_default = quantization_mapping[self.qtype](self, tensor, self.bits_out, symmetric=False)
                 self.out_quantization = self.out_quantization_default
 
                 if self.quantization_scheduler is not None:

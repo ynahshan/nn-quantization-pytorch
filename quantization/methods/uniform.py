@@ -55,9 +55,9 @@ class QuantizationBase(object):
         return []
 
 
-class MinMaxQuantization(QuantizationBase):
+class UniformQuantization(QuantizationBase):
     def __init__(self, module, num_bits, symmetric, stochastic=False):
-        super(MinMaxQuantization, self).__init__(module, num_bits, symmetric)
+        super(UniformQuantization, self).__init__(module, num_bits, symmetric)
         self.stochastic = stochastic
         if symmetric:
             self.qmax = 2 ** (self.num_bits - 1) - 1
@@ -85,6 +85,21 @@ class MinMaxQuantization(QuantizationBase):
         # de-quantize
         t_q = t_q * delta
         return t_q
+
+    def __for_repr__(self):
+        return [('bits', self.num_bits), ('symmetric', self.symmetric)]
+
+    def __repr__(self):
+        s = '{} - ['.format(type(self).__name__)
+        for name, value in self.__for_repr__():
+            s += '{}: {}, '.format(name, value)
+        return s + ']'
+        # return '{} - bits: {}, symmetric: {}'.format(type(self).__name__, self.num_bits, self.symmetric)
+
+
+class MaxAbsDynamicQuantization(UniformQuantization):
+    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False):
+        super(MaxAbsDynamicQuantization, self).__init__(module, tensor, num_bits, symmetric)
 
     def __call__(self, tensor):
         alpha = tensor.abs().max()

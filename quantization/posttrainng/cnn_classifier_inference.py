@@ -1,7 +1,7 @@
 import argparse
 import os
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 
 import random
 import shutil
@@ -65,6 +65,7 @@ parser.add_argument('--quantize', '-q', action='store_true', help='Enable quanti
 parser.add_argument('--experiment', '-exp', help='Name of the experiment', default='default')
 parser.add_argument('--bit_weights', '-bw', type=int, help='Number of bits for weights', default=None)
 parser.add_argument('--bit_act', '-ba', type=int, help='Number of bits for activations', default=None)
+parser.add_argument('--qtype', default='aciq_laplace', help='Type of quantization method')
 
 best_acc1 = 0
 
