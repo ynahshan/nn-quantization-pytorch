@@ -82,18 +82,21 @@ class MseDirectQuantizationNoPrior(ClippedUniformQuantization):
         self.register_buffer(self.alpha_param_name, tensor.new_tensor([opt_alpha]))
 
     def estimate_quant_error(self, alpha, x):
-        delta = alpha / (self.num_bins - 1)
-        Cx = torch.clamp(x, -delta / 2, alpha + delta / 2)
+        delta = (2 if self.symmetric else 1) * alpha / (self.num_bins - 1)
+        if self.tails:
+            Cx = torch.clamp(x,(-alpha if self.symmetric else 0.) - delta / 2, alpha + delta / 2)
+        else:
+            Cx = torch.clamp(x, -alpha if self.symmetric else 0., alpha)
         Ci = Cx - x
 
-        N = x.numel()
+        N = x.numel() if self.symmetric else x[x != 0].numel()
         xq = self.__quantize__(x, alpha)
 
         qerr_exp = torch.sum((xq - Cx)) / N
         qerrsq_exp = torch.sum((xq - Cx) ** 2) / N
         cerr = torch.sum(Ci ** 2) / N
         mixed_err = 2 * torch.sum(Ci) * alpha * qerr_exp / N
-        mse = alpha ** 2 * qerrsq_exp + cerr + mixed_err
+        mse = qerrsq_exp + cerr + mixed_err
         return mse.item()
 
 
@@ -114,7 +117,7 @@ class MseDecomposedQuantization(ClippedUniformQuantization):
             clip_err = torch.sum((xclamp - x) ** 2) / N
 
             xq = self.__quantize__(xclamp, alpha)
-            quant_err = torch.sum((xq - x) ** 2) / N
+            quant_err = torch.sum((xq - xclamp) ** 2) / N
             err = clip_err + quant_err
         else:
             err = torch.sum(x**2) / N
