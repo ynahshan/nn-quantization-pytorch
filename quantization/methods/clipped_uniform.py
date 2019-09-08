@@ -1,7 +1,7 @@
-import torch
-import torch.nn as nn
-from .uniform import UniformQuantization
 import scipy.optimize as opt
+import torch
+
+from .uniform import UniformQuantization
 
 
 class ClippedUniformQuantization(UniformQuantization):
@@ -70,6 +70,32 @@ class MseDirectQuantization(ClippedUniformQuantization):
         err = torch.sum((xq - x) ** 2) / N
         return err.item()
 
+
+
+class MseDirectQuantizationNoPrior(ClippedUniformQuantization):
+    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False, tails=True):
+        super(MseDirectQuantizationNoPrior, self).__init__(module, num_bits, symmetric, stochastic,tails)
+
+        with torch.no_grad():
+            opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor),
+                                            bounds=(tensor.min().item(), tensor.max().item())).x
+
+        self.register_buffer(self.alpha_param_name, tensor.new_tensor([opt_alpha]))
+
+    def estimate_quant_error(self, alpha, x):
+        delta = alpha / (self.num_bins - 1)
+        Cx = torch.clamp(x, -delta / 2, alpha + delta / 2)
+        Ci = Cx - x
+
+        N = x.numel()
+        xq = self.__quantize__(x, alpha)
+
+        qerr_exp = torch.sum((xq - Cx)) / N
+        qerrsq_exp = torch.sum((xq - Cx) ** 2) / N
+        cerr = torch.sum(Ci ** 2) / N
+        mixed_err = 2 * torch.sum(Ci) * alpha * qerr_exp / N
+        mse = alpha ** 2 * qerrsq_exp + cerr + mixed_err
+        return mse.item()
 
 class MseDecomposedQuantization(ClippedUniformQuantization):
     def __init__(self, module, tensor, num_bits, symmetric, stochastic=False):

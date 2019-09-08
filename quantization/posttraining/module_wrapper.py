@@ -1,6 +1,8 @@
-import torch
 import torch.nn as nn
-from itertools import count
+
+from quantization.methods.clipped_uniform import MaxAbsStaticQuantization, AciqLaplaceQuantization, AciqGausQuantization
+from quantization.methods.clipped_uniform import MseDirectQuantization, MseDirectQuantizationNoPrior
+from quantization.methods.clipped_uniform import MseQuantEstimatedQuantization, MseDecomposedQuantization
 from quantization.methods.non_uniform import KmeansQuantization
 
 quantization_mapping = {'aciq_laplace': AciqLaplaceQuantization,
@@ -8,7 +10,8 @@ quantization_mapping = {'aciq_laplace': AciqLaplaceQuantization,
                         'mse_direct': MseDirectQuantization,
                         'mse_decomp': MseDecomposedQuantization,
                         'mse_quant_est': MseQuantEstimatedQuantization,
-                        'max_static': MaxAbsStaticQuantization
+                        'max_static': MaxAbsStaticQuantization,
+                        'mse_direct_no_prior': MseDirectQuantizationNoPrior
                         }
 
 
