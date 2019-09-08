@@ -7,8 +7,8 @@ import scipy.optimize as opt
 class ClippedUniformQuantization(UniformQuantization):
     alpha_param_name = 'alpha'
 
-    def __init__(self, module, num_bits, symmetric, stochastic=False):
-        super(ClippedUniformQuantization, self).__init__(module, num_bits, symmetric, stochastic)
+    def __init__(self, module, num_bits, symmetric, stochastic=False,tails=False):
+        super(ClippedUniformQuantization, self).__init__(module, num_bits, symmetric, stochastic,tails)
 
     def __call__(self, tensor):
         t_q = self.__quantize__(tensor, self.alpha)
@@ -55,8 +55,8 @@ class MaxAbsStaticQuantization(ClippedUniformQuantization):
 
 
 class MseDirectQuantization(ClippedUniformQuantization):
-    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False):
-        super(MseDirectQuantization, self).__init__(module, num_bits, symmetric, stochastic)
+    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False, tails=True):
+        super(MseDirectQuantization, self).__init__(module, num_bits, symmetric, stochastic, tails)
 
         with torch.no_grad():
             opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor),

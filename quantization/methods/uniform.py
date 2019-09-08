@@ -56,12 +56,16 @@ class QuantizationBase(object):
 
 
 class UniformQuantization(QuantizationBase):
-    def __init__(self, module, num_bits, symmetric, stochastic=False):
+    def __init__(self, module, num_bits, symmetric, stochastic=False, tails=False):
         super(UniformQuantization, self).__init__(module, num_bits, symmetric)
+        self.tails = tails
         self.stochastic = stochastic
         if symmetric:
             self.qmax = 2 ** (self.num_bits - 1) - 1
             self.qmin = -self.qmax - 1
+        elif tails:
+            self.qmax = 2 ** self.num_bits - 0.5
+            self.qmin = -0.5
         else:
             self.qmax = 2 ** self.num_bits - 1
             self.qmin = 0
@@ -87,7 +91,7 @@ class UniformQuantization(QuantizationBase):
         return t_q
 
     def __for_repr__(self):
-        return [('bits', self.num_bits), ('symmetric', self.symmetric)]
+        return [('bits', self.num_bits), ('symmetric', self.symmetric), ('tails', self.tails)]
 
     def __repr__(self):
         s = '{} - ['.format(type(self).__name__)
