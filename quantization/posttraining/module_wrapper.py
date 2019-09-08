@@ -2,9 +2,6 @@ import torch
 import torch.nn as nn
 from itertools import count
 from quantization.methods.non_uniform import KmeansQuantization
-from quantization.methods.clipped_uniform import MseDirectQuantization, MseDecomposedQuantization, MseQuantEstimatedQuantization
-from quantization.methods.clipped_uniform import MaxAbsStaticQuantization, AciqLaplaceQuantization, AciqGausQuantization
-
 
 quantization_mapping = {'aciq_laplace': AciqLaplaceQuantization,
                         'aciq_gaus': AciqGausQuantization,

@@ -23,7 +23,7 @@ from pathlib import Path
 from utils.mllog import MLlogger
 from utils.meters import AverageMeter, ProgressMeter, accuracy
 from models.resnet import resnet as custom_resnet
-from quantization.posttrainng.module_wrapper import ActivationModuleWrapperPost
+from quantization.posttraining.module_wrapper import ActivationModuleWrapperPost
 
 home = str(Path.home())
 
@@ -38,7 +38,9 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                         ' | '.join(model_names) +
                         ' (default: resnet18)')
 parser.add_argument('--dataset', metavar='DATASET', default='imagenet',
-                    help='dataset name or folder')
+                    help='dataset name')
+parser.add_argument('--datapath', metavar='DATAPATH', type=str, default=None,
+                    help='dataset folder')
 parser.add_argument('-j', '--workers', default=25, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('-b', '--batch-size', default=256, type=int,
@@ -132,7 +134,7 @@ def main_worker(args, ml_logger):
         else:
             model = torch.nn.DataParallel(model, args.gpu_ids)
 
-    val_data = get_dataset(args.dataset, 'val', get_transform(args.dataset, augment=False))
+    val_data = get_dataset(args.dataset, 'val', get_transform(args.dataset, augment=False), datasets_path=args.datapath)
     val_loader = torch.utils.data.DataLoader(
         val_data,
         batch_size=args.batch_size, shuffle=args.shuffle,
