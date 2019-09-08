@@ -64,7 +64,7 @@ class UniformQuantization(QuantizationBase):
             self.qmax = 2 ** (self.num_bits - 1) - 1
             self.qmin = -self.qmax - 1
         elif tails:
-            self.qmax = 2 ** self.num_bits - 0.5
+            self.qmax = 2 ** self.num_bits - 0.5 - 1e-6
             self.qmin = -0.5
         else:
             self.qmax = 2 ** self.num_bits - 1
@@ -85,6 +85,7 @@ class UniformQuantization(QuantizationBase):
         # clamp and round
         t_q = torch.clamp(t_q, self.qmin, self.qmax)
         t_q = RoundSTE.apply(t_q)
+        assert torch.unique(t_q).shape[0] <= self.num_bins
 
         # uncomment to debug quantization
         # print(torch.unique(t_q))
