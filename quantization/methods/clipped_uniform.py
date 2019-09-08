@@ -155,7 +155,7 @@ class AciqGausQuantization(ClippedUniformQuantization):
             else:
                 # We need to measure std before ReLu.
                 # Instead assume zero mean and multiply std after relu by 2 to approximation std before relu.
-                sigma = 2 * torch.sqrt(torch.mean(tensor[tensor != 0]**2))
+                sigma = torch.sqrt(torch.mean(tensor[tensor != 0]**2))
                 alpha_opt = self.gaus_mult_positive[self.num_bits] * sigma
 
         self.register_buffer(self.alpha_param_name, tensor.new_tensor([alpha_opt]))
@@ -175,7 +175,7 @@ class AciqLaplaceQuantization(ClippedUniformQuantization):
             else:
                 # We need to measure b before ReLu.
                 # Instead assume zero mean and multiply b after relu by 2 to approximation b before relu.
-                b = 2 * tensor[tensor != 0].abs().mean()
+                b = tensor[tensor != 0].abs().mean()
                 alpha = self.laplace_mult_positive[self.num_bits] * b
 
         self.register_buffer(self.alpha_param_name, tensor.new_tensor([alpha]))
