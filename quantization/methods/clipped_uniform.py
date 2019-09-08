@@ -7,7 +7,7 @@ from .uniform import UniformQuantization
 class ClippedUniformQuantization(UniformQuantization):
     alpha_param_name = 'alpha'
 
-    def __init__(self, module, num_bits, symmetric, stochastic=False,tails=False):
+    def __init__(self, module, num_bits, symmetric, stochastic=False, tails=False):
         super(ClippedUniformQuantization, self).__init__(module, num_bits, symmetric, stochastic,tails)
 
     def __call__(self, tensor):
@@ -55,7 +55,7 @@ class MaxAbsStaticQuantization(ClippedUniformQuantization):
 
 
 class MseDirectQuantization(ClippedUniformQuantization):
-    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False, tails=True):
+    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False, tails=False):
         super(MseDirectQuantization, self).__init__(module, num_bits, symmetric, stochastic, tails)
 
         with torch.no_grad():
@@ -71,10 +71,9 @@ class MseDirectQuantization(ClippedUniformQuantization):
         return err.item()
 
 
-
 class MseDirectQuantizationNoPrior(ClippedUniformQuantization):
-    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False, tails=True):
-        super(MseDirectQuantizationNoPrior, self).__init__(module, num_bits, symmetric, stochastic,tails)
+    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False, tails=False):
+        super(MseDirectQuantizationNoPrior, self).__init__(module, num_bits, symmetric, stochastic, tails)
 
         with torch.no_grad():
             opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor),
@@ -96,6 +95,7 @@ class MseDirectQuantizationNoPrior(ClippedUniformQuantization):
         mixed_err = 2 * torch.sum(Ci) * alpha * qerr_exp / N
         mse = alpha ** 2 * qerrsq_exp + cerr + mixed_err
         return mse.item()
+
 
 class MseDecomposedQuantization(ClippedUniformQuantization):
     def __init__(self, module, tensor, num_bits, symmetric, stochastic=False):

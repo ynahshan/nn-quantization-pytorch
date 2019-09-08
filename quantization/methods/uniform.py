@@ -72,7 +72,7 @@ class UniformQuantization(QuantizationBase):
 
     def __quantize__(self, tensor, alpha):
         delta = (2 if self.symmetric else 1) * alpha / (self.num_bins - 1)
-
+        delta = max(delta, 1e-8)
         # quantize
         t_q = tensor / delta
 
@@ -85,6 +85,9 @@ class UniformQuantization(QuantizationBase):
         # clamp and round
         t_q = torch.clamp(t_q, self.qmin, self.qmax)
         t_q = RoundSTE.apply(t_q)
+
+        # uncomment to debug quantization
+        # print(torch.unique(t_q))
 
         # de-quantize
         t_q = t_q * delta
