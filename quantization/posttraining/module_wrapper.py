@@ -20,6 +20,7 @@ class ActivationModuleWrapperPost(nn.Module):
         self.quantization_scheduler = quantization_scheduler
         self.bits_out = kwargs['bits_out']
         self.qtype = kwargs['qtype']
+        self.post_relu = kwargs['post_relu']
         self.enabled = True
         self.active = True
 
@@ -45,12 +46,20 @@ class ActivationModuleWrapperPost(nn.Module):
         return self.enabled and self.active and self.bits_out is not None
 
     def forward(self, *input):
-        out = self.wrapped_module(*input)
+        if self.post_relu:
+            out = self.wrapped_module(*input)
 
-        # Quantize output
-        if self.__enabled__():
-            self.verify_initialized(self.out_quantization, out, self.out_quantization_init_fn)
-            out = self.out_quantization(out)
+            # Quantize output
+            if self.__enabled__():
+                self.verify_initialized(self.out_quantization, out, self.out_quantization_init_fn)
+                out = self.out_quantization(out)
+        else:
+            # Quantize output
+            if self.__enabled__():
+                self.verify_initialized(self.out_quantization, *input, self.out_quantization_init_fn)
+                out = self.out_quantization(*input)
+            else:
+                out = self.wrapped_module(*input)
 
         return out
 

@@ -305,6 +305,7 @@ class ModelQuantizer:
         self.args = args
         self.bit_weights = args.bit_weights
         self.bit_act = args.bit_act
+        self.post_relu = args.post_relu
         self.functor_map = {nn.Conv2d: Conv2dFunctor}
         self.replacement_factory = replacement_factory
 
@@ -341,7 +342,8 @@ class ModelQuantizer:
         for qm in self.quantizable_modules:
             # replace module by it's wrapper
             fn = self.functor_map[type(qm.module)](qm.module) if type(qm.module) in self.functor_map else None
-            args = {"bits_out": self.bit_act, "bits_weight": self.bit_weights, "forward_functor": fn}
+            args = {"bits_out": self.bit_act, "bits_weight": self.bit_weights, "forward_functor": fn,
+                    "post_relu": self.post_relu}
             args.update(vars(self.args))
             if hasattr(qm, 'bn'):
                 args['bn'] = qm.bn

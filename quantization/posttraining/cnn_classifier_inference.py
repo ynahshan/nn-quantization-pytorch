@@ -67,6 +67,7 @@ parser.add_argument('--quantize', '-q', action='store_true', help='Enable quanti
 parser.add_argument('--experiment', '-exp', help='Name of the experiment', default='default')
 parser.add_argument('--bit_weights', '-bw', type=int, help='Number of bits for weights', default=None)
 parser.add_argument('--bit_act', '-ba', type=int, help='Number of bits for activations', default=None)
+parser.add_argument('--pre_relu', dest='pre_relu', action='store_true', help='use pre-ReLU quantization')
 parser.add_argument('--qtype', default='aciq_laplace', help='Type of quantization method')
 
 best_acc1 = 0
@@ -74,6 +75,7 @@ best_acc1 = 0
 
 def main():
     args = parser.parse_args()
+    args.post_relu = not args.pre_relu
 
     if args.seed is not None:
         random.seed(args.seed)
