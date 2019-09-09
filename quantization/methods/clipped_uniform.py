@@ -71,9 +71,9 @@ class MseDirectQuantization(ClippedUniformQuantization):
         return err.item()
 
 
-class MseDirectQuantizationNoPrior(ClippedUniformQuantization):
+class MseDirectNoPriorQuantization(ClippedUniformQuantization):
     def __init__(self, module, tensor, num_bits, symmetric, stochastic=False, tails=False):
-        super(MseDirectQuantizationNoPrior, self).__init__(module, num_bits, symmetric, stochastic, tails)
+        super(MseDirectNoPriorQuantization, self).__init__(module, num_bits, symmetric, stochastic, tails)
 
         with torch.no_grad():
             opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor),
@@ -100,33 +100,9 @@ class MseDirectQuantizationNoPrior(ClippedUniformQuantization):
         return mse.item()
 
 
-class MseDecomposedQuantization(ClippedUniformQuantization):
+class MseUniformPriorQuantization(ClippedUniformQuantization):
     def __init__(self, module, tensor, num_bits, symmetric, stochastic=False):
-        super(MseDecomposedQuantization, self).__init__(module, num_bits, symmetric, stochastic)
-
-        with torch.no_grad():
-            opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor),
-                                            bounds=(tensor.min().item(), tensor.max().item())).x
-
-        self.register_buffer(self.alpha_param_name, tensor.new_tensor([opt_alpha]))
-
-    def estimate_quant_error(self, alpha, x):
-        N = x.numel() if self.symmetric else x[x != 0].numel()
-        if alpha > 0:
-            xclamp = torch.clamp(x, -alpha, alpha)
-            clip_err = torch.sum((xclamp - x) ** 2) / N
-
-            xq = self.__quantize__(xclamp, alpha)
-            quant_err = torch.sum((xq - xclamp) ** 2) / N
-            err = clip_err + quant_err
-        else:
-            err = torch.sum(x**2) / N
-        return err.item()
-
-
-class MseQuantEstimatedQuantization(ClippedUniformQuantization):
-    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False):
-        super(MseQuantEstimatedQuantization, self).__init__(module, num_bits, symmetric, stochastic)
+        super(MseUniformPriorQuantization, self).__init__(module, num_bits, symmetric, stochastic)
 
         with torch.no_grad():
             opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor), bounds=(tensor.min().item(), tensor.max().item())).x

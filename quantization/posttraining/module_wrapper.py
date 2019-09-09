@@ -1,17 +1,15 @@
 import torch.nn as nn
 
 from quantization.methods.clipped_uniform import MaxAbsStaticQuantization, AciqLaplaceQuantization, AciqGausQuantization
-from quantization.methods.clipped_uniform import MseDirectQuantization, MseDirectQuantizationNoPrior
-from quantization.methods.clipped_uniform import MseQuantEstimatedQuantization, MseDecomposedQuantization
+from quantization.methods.clipped_uniform import MseDirectQuantization, MseDirectNoPriorQuantization, MseUniformPriorQuantization
 from quantization.methods.non_uniform import KmeansQuantization
 
-quantization_mapping = {'aciq_laplace': AciqLaplaceQuantization,
+quantization_mapping = {'max_static': MaxAbsStaticQuantization,
+                        'aciq_laplace': AciqLaplaceQuantization,
                         'aciq_gaus': AciqGausQuantization,
                         'mse_direct': MseDirectQuantization,
-                        'mse_decomp': MseDecomposedQuantization,
-                        'mse_quant_est': MseQuantEstimatedQuantization,
-                        'max_static': MaxAbsStaticQuantization,
-                        'mse_direct_no_prior': MseDirectQuantizationNoPrior
+                        'mse_uniform_prior': MseUniformPriorQuantization,
+                        'mse_direct_no_prior': MseDirectNoPriorQuantization
                         }
 
 

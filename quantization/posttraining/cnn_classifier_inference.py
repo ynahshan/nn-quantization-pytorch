@@ -149,11 +149,10 @@ def main_worker(args, ml_logger):
         all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
         all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
         all_relu6 = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU6)]
+        layers = all_relu[1:-1] + all_relu6[1:-1]
         # self.quantizable_layers = ['layer1.0.relu']  # TODO: make it more generic
-        replacement_factory = {nn.ReLU: ActivationModuleWrapperPost}
-        ModelQuantizer(model, args, all_relu[1:-1], replacement_factory)
-        replacement_factory = {nn.ReLU6: ActivationModuleWrapperPost}
-        ModelQuantizer(model, args, all_relu6[1:-1], replacement_factory)
+        replacement_factory = {nn.ReLU: ActivationModuleWrapperPost, nn.ReLU6: ActivationModuleWrapperPost}
+        ModelQuantizer(model, args, layers, replacement_factory)
 
     # if args.quantize:
     #     mq.log_quantizer_state(ml_logger, -1)
