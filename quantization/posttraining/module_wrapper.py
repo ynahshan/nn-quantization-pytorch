@@ -1,5 +1,6 @@
+import os
 import torch.nn as nn
-
+import torch
 from quantization.methods.clipped_uniform import MaxAbsStaticQuantization, AciqLaplaceQuantization, AciqGausQuantization
 from quantization.methods.clipped_uniform import MseDirectQuantization, MseDirectNoPriorQuantization, MseUniformPriorQuantization
 from quantization.methods.non_uniform import KmeansQuantization
@@ -47,6 +48,9 @@ class ActivationModuleWrapperPost(nn.Module):
         return self.enabled and self.active and self.bits_out is not None
 
     def forward(self, *input):
+        # Uncomment to enable dump
+        # torch.save(*input, os.path.join('dump', self.name + '_in' + '.pt'))
+
         if self.post_relu:
             out = self.wrapped_module(*input)
 
@@ -61,6 +65,9 @@ class ActivationModuleWrapperPost(nn.Module):
                 out = self.out_quantization(*input)
             else:
                 out = self.wrapped_module(*input)
+
+        # Uncomment to enable dump
+        # torch.save(out, os.path.join('dump', self.name + '_out' + '.pt'))
 
         return out
 
