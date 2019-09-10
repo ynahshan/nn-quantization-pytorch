@@ -139,19 +139,11 @@ class ModelQuantizer:
                                  if LearnableDifferentiableQuantization.binning_param_name in name]
         return weight_binning_params
 
-    def log_weights_quantizer_state(self, ml_logger, step, name, qwrapper):
-        qwrapper.log_state(step, ml_logger)
-
-    def log_act_quantizer_state(self, ml_logger, step, name, qwrapper):
-        qwrapper.log_state(step, ml_logger)
-
     def log_quantizer_state(self, ml_logger, step):
-        with torch.no_grad():
-            for name, qwrapper in self.quantization_wrappers:
-                if self.bit_weights is not None:
-                    self.log_weights_quantizer_state(ml_logger, step, name, qwrapper)
-                if self.bit_act is not None:
-                    self.log_act_quantizer_state(ml_logger, step, name, qwrapper)
+        if self.bit_weights is not None or self.bit_act is not None:
+            with torch.no_grad():
+                for name, qwrapper in self.quantization_wrappers:
+                    qwrapper.log_state(step, ml_logger)
 
     class QuantMethod:
         def __init__(self, quantization_wrappers, method):

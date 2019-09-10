@@ -153,10 +153,8 @@ def main_worker(args, ml_logger):
         replacement_factory = {nn.ReLU: ActivationModuleWrapperPost,
                                nn.ReLU6: ActivationModuleWrapperPost,
                                nn.Conv2d: ParameterModuleWrapperPost}
-        ModelQuantizer(model, args, layers, replacement_factory)
-
-    # if args.quantize:
-    #     mq.log_quantizer_state(ml_logger, -1)
+        mq = ModelQuantizer(model, args, layers, replacement_factory)
+        mq.log_quantizer_state(ml_logger, -1)
 
     acc = validate(val_loader, model, criterion, args, device)
     ml_logger.log_metric('Val Acc1', acc, step='auto')

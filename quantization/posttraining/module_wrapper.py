@@ -108,8 +108,8 @@ class ParameterModuleWrapperPost(nn.Module):
         self.enabled = True
         self.active = True
         self.centroids_hist = {}
-        self.log_weight_hist = False
-        self.log_mse = False
+        self.log_weights_hist = False
+        self.log_weights_mse = False
         self.log_clustering = False
         self.bn = kwargs['bn'] if 'bn' in kwargs else None
 
@@ -125,6 +125,8 @@ class ParameterModuleWrapperPost(nn.Module):
             if self.quantization_scheduler is not None:
                 self.quantization_scheduler.add_quantization_params(self.weight_quantization.optim_parameters())
 
+            self.weight_q = self.weight_quantization(self.weight)
+            self.weight_mse = torch.mean((self.weight_q - self.weight)**2).item()
             print("ParameterModuleWrapperPost - {} | {} | {}".format(self.name, str(self.weight_quantization),
                                                                       str(self.weight.device)))
 
@@ -138,7 +140,7 @@ class ParameterModuleWrapperPost(nn.Module):
         w = self.weight
         if self.__enabled__():
             # Quantize weights
-            w = self.weight_quantization(w)
+            w = self.weight_q
 
         out = self.forward_functor(*input, weight=w, bias=self.bias)
 
@@ -186,14 +188,12 @@ class ParameterModuleWrapperPost(nn.Module):
             #     B, v = self.weight_quantization.clustering(weight)
             #     plot_tensor_binning(weight, B, v, self.name, step, ml_logger)
 
-            if self.log_weight_hist:
+            if self.log_weights_hist:
                 ml_logger.tf_logger.add_histogram(self.name + '.weight', self.weight.cpu().flatten(),  step='auto')
 
             if self.log_mse:
-                weight_q = self.weight_quantization(self.weight.flatten())
-                mse_q = torch.nn.MSELoss()(self.weight.flatten(), weight_q)
-                ml_logger.log_metric(self.name + '.mse_q', mse_q.cpu().item(),  step='auto')
+                ml_logger.log_metric(self.name + '.mse_q', self.weight_mse,  step='auto')
 
-                weight_kmeans = KmeansQuantization(self.bit_weights)(self.weight.flatten())
-                mse_kmeans = torch.nn.MSELoss()(self.weight.flatten(), weight_kmeans)
-                ml_logger.log_metric(self.name + '.mse_kmeans', mse_kmeans.cpu().item(),  step='auto')
+                # weight_kmeans = KmeansQuantization(self.bit_weights)(self.weight.flatten())
+                # mse_kmeans = torch.nn.MSELoss()(self.weight.flatten(), weight_kmeans)
+                # ml_logger.log_metric(self.name + '.mse_kmeans', mse_kmeans.cpu().item(),  step='auto')
