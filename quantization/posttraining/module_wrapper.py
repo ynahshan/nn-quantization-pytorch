@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch
 from quantization.methods.clipped_uniform import MaxAbsStaticQuantization, AciqLaplaceQuantization, AciqGausQuantization
 from quantization.methods.clipped_uniform import MseDirectQuantization, MseDirectNoPriorQuantization, MseUniformPriorQuantization
-from quantization.methods.clipped_uniform import AngDistanceQuantization, L3NormQuantization, L4NormQuantization
+from quantization.methods.clipped_uniform import AngDistanceQuantization, L3NormQuantization, L4NormQuantization, LpNormQuantization
 from quantization.methods.non_uniform import KmeansQuantization
 
 quantization_mapping = {'max_static': MaxAbsStaticQuantization,
@@ -14,7 +14,8 @@ quantization_mapping = {'max_static': MaxAbsStaticQuantization,
                         'mse_direct_no_prior': MseDirectNoPriorQuantization,
                         'ang_dis': AngDistanceQuantization,
                         'l3_norm': L3NormQuantization,
-                        'l4_norm': L4NormQuantization
+                        'l4_norm': L4NormQuantization,
+                        'lp_norm': LpNormQuantization
                         }
 
 
@@ -36,7 +37,7 @@ class ActivationModuleWrapperPost(nn.Module):
 
             def __init_out_quantization__(tensor):
                 self.out_quantization_default = quantization_mapping[self.qtype](self, tensor, self.bits_out,
-                                                                                 symmetric=False, uint=True)
+                                                                                 symmetric=False, uint=True, kwargs=kwargs)
                 self.out_quantization = self.out_quantization_default
 
                 if self.quantization_scheduler is not None:
@@ -124,7 +125,7 @@ class ParameterModuleWrapperPost(nn.Module):
 
         if self.bit_weights is not None:
             self.weight_quantization_default = quantization_mapping[self.qtype](self, self.weight, self.bit_weights,
-                                                                             symmetric=True, uint=True)
+                                                                             symmetric=True, uint=True, kwargs=kwargs)
             self.weight_quantization = self.weight_quantization_default
             if self.quantization_scheduler is not None:
                 self.quantization_scheduler.add_quantization_params(self.weight_quantization.optim_parameters())

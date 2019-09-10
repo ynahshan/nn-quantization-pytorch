@@ -69,6 +69,7 @@ parser.add_argument('--bit_weights', '-bw', type=int, help='Number of bits for w
 parser.add_argument('--bit_act', '-ba', type=int, help='Number of bits for activations', default=None)
 parser.add_argument('--pre_relu', dest='pre_relu', action='store_true', help='use pre-ReLU quantization')
 parser.add_argument('--qtype', default='aciq_laplace', help='Type of quantization method')
+parser.add_argument('-lp', type=float, help='p parameter of Lp norm', default=3.)
 
 best_acc1 = 0
 
