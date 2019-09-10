@@ -125,6 +125,9 @@ class ParameterModuleWrapperPost(nn.Module):
             if self.quantization_scheduler is not None:
                 self.quantization_scheduler.add_quantization_params(self.weight_quantization.optim_parameters())
 
+            print("ParameterModuleWrapperPost - {} | {} | {}".format(self.name, str(self.weight_quantization),
+                                                                      str(self.weight.device)))
+
         if self.quantization_scheduler is not None:
             self.quantization_scheduler.register_module_quantization(self)
 
