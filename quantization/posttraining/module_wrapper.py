@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch
 from quantization.methods.clipped_uniform import MaxAbsStaticQuantization, AciqLaplaceQuantization, AciqGausQuantization
 from quantization.methods.clipped_uniform import MseDirectQuantization, MseDirectNoPriorQuantization, MseUniformPriorQuantization
+from quantization.methods.clipped_uniform import AngDistanceQuantization, L3NormQuantization, L4NormQuantization
 from quantization.methods.non_uniform import KmeansQuantization
 
 quantization_mapping = {'max_static': MaxAbsStaticQuantization,
@@ -10,7 +11,10 @@ quantization_mapping = {'max_static': MaxAbsStaticQuantization,
                         'aciq_gaus': AciqGausQuantization,
                         'mse_direct': MseDirectQuantization,
                         'mse_uniform_prior': MseUniformPriorQuantization,
-                        'mse_direct_no_prior': MseDirectNoPriorQuantization
+                        'mse_direct_no_prior': MseDirectNoPriorQuantization,
+                        'ang_dis': AngDistanceQuantization,
+                        'l3_norm': L3NormQuantization,
+                        'l4_norm': L4NormQuantization
                         }
 
 
@@ -191,7 +195,7 @@ class ParameterModuleWrapperPost(nn.Module):
             if self.log_weights_hist:
                 ml_logger.tf_logger.add_histogram(self.name + '.weight', self.weight.cpu().flatten(),  step='auto')
 
-            if self.log_mse:
+            if self.log_weights_mse:
                 ml_logger.log_metric(self.name + '.mse_q', self.weight_mse,  step='auto')
 
                 # weight_kmeans = KmeansQuantization(self.bit_weights)(self.weight.flatten())
