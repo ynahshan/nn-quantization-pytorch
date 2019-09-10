@@ -31,7 +31,8 @@ class ActivationModuleWrapperPost(nn.Module):
             self.out_quantization = self.out_quantization_default = None
 
             def __init_out_quantization__(tensor):
-                self.out_quantization_default = quantization_mapping[self.qtype](self, tensor, self.bits_out, symmetric=False)
+                self.out_quantization_default = quantization_mapping[self.qtype](self, tensor, self.bits_out,
+                                                                                 symmetric=False, uint=True)
                 self.out_quantization = self.out_quantization_default
 
                 if self.quantization_scheduler is not None:
@@ -103,6 +104,7 @@ class ParameterModuleWrapperPost(nn.Module):
         self.forward_functor = kwargs['forward_functor']
         self.bit_weights = kwargs['bits_weight']
         self.bits_out = kwargs['bits_out']
+        self.qtype = kwargs['qtype']
         self.enabled = True
         self.active = True
         self.centroids_hist = {}
@@ -117,7 +119,8 @@ class ParameterModuleWrapperPost(nn.Module):
         delattr(wrapped_module, 'bias')
 
         if self.bit_weights is not None:
-            self.weight_quantization_default = MseDirectQuantization(self, self.weight, self.bit_weights, symmetric=True)
+            self.weight_quantization_default = quantization_mapping[self.qtype](self, self.weight, self.bit_weights,
+                                                                             symmetric=True, uint=True)
             self.weight_quantization = self.weight_quantization_default
             if self.quantization_scheduler is not None:
                 self.quantization_scheduler.add_quantization_params(self.weight_quantization.optim_parameters())

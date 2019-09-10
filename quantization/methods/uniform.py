@@ -14,10 +14,9 @@ class RoundSTE(torch.autograd.Function):
 
 
 class QuantizationBase(object):
-    def __init__(self, module, num_bits, symmetric=True):
+    def __init__(self, module, num_bits):
         self.module = module
         self.num_bits = num_bits
-        self.symmetric = symmetric
         self.num_bins = int(2 ** num_bits)
         self.opt_params = {}
         self.named_params = []
@@ -56,25 +55,35 @@ class QuantizationBase(object):
 
 
 class UniformQuantization(QuantizationBase):
-    def __init__(self, module, num_bits, symmetric, stochastic=False, tails=False):
-        super(UniformQuantization, self).__init__(module, num_bits, symmetric)
-        self.tails = tails
+    def __init__(self, module, num_bits, symmetric, uint=False, stochastic=False, tails=False):
+        super(UniformQuantization, self).__init__(module, num_bits)
+        if not symmetric and not uint:
+            raise RuntimeError("Can't perform integer quantization on non symmetric distributions.")
+
+        self.symmetric = symmetric
+        self.uint = uint
         self.stochastic = stochastic
-        if symmetric:
-            self.qmax = 2 ** (self.num_bits - 1) - 1
-            self.qmin = -self.qmax - 1
-        elif tails:
-            self.qmax = 2 ** self.num_bits - 0.5 - 1e-6
-            self.qmin = -0.5
-        else:
+        self.tails = tails
+        if uint:
             self.qmax = 2 ** self.num_bits - 1
             self.qmin = 0
+        else:
+            self.qmax = 2 ** (self.num_bits - 1) - 1
+            self.qmin = -self.qmax - 1
+
+        if tails:
+            self.qmax -= 0.5 + 1e-6
+            self.qmin -= 0.5
 
     def __quantize__(self, tensor, alpha):
         delta = (2 if self.symmetric else 1) * alpha / (self.num_bins - 1)
         delta = max(delta, 1e-8)
+
         # quantize
-        t_q = tensor / delta
+        if self.uint and self.symmetric:
+            t_q = (tensor + alpha) / delta
+        else:
+            t_q = tensor / delta
 
         # stochastic rounding
         if self.stochastic and self.module.training:
@@ -91,7 +100,11 @@ class UniformQuantization(QuantizationBase):
         # print(torch.unique(t_q))
 
         # de-quantize
-        t_q = t_q * delta
+        if self.uint and self.symmetric:
+            t_q = t_q * delta - alpha
+        else:
+            t_q = t_q * delta
+
         return t_q
 
     def __for_repr__(self):

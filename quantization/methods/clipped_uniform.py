@@ -7,8 +7,8 @@ from .uniform import UniformQuantization
 class ClippedUniformQuantization(UniformQuantization):
     alpha_param_name = 'alpha'
 
-    def __init__(self, module, num_bits, symmetric, stochastic=False, tails=False):
-        super(ClippedUniformQuantization, self).__init__(module, num_bits, symmetric, stochastic,tails)
+    def __init__(self, module, num_bits, symmetric, uint=False, stochastic=False, tails=False):
+        super(ClippedUniformQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic,tails)
 
     def __call__(self, tensor):
         t_q = self.__quantize__(tensor, self.alpha)
@@ -20,8 +20,8 @@ class ClippedUniformQuantization(UniformQuantization):
 
 
 class LearnedStepSizeQuantization(ClippedUniformQuantization):
-    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False):
-        super(LearnedStepSizeQuantization, self).__init__(module, num_bits, symmetric, stochastic)
+    def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False):
+        super(LearnedStepSizeQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic)
 
         with torch.no_grad():
             maxabs = tensor.abs().max()
@@ -47,16 +47,16 @@ class LearnedStepSizeQuantization(ClippedUniformQuantization):
 
 
 class MaxAbsStaticQuantization(ClippedUniformQuantization):
-    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False):
-        super(MaxAbsStaticQuantization, self).__init__(module, num_bits, symmetric)
+    def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False):
+        super(MaxAbsStaticQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic)
 
         with torch.no_grad():
             self.register_buffer(self.alpha_param_name, tensor.new_tensor([tensor.abs().max()]))
 
 
 class MseDirectQuantization(ClippedUniformQuantization):
-    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False, tails=False):
-        super(MseDirectQuantization, self).__init__(module, num_bits, symmetric, stochastic, tails)
+    def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False, tails=False):
+        super(MseDirectQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic, tails)
 
         with torch.no_grad():
             opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor),
@@ -72,8 +72,8 @@ class MseDirectQuantization(ClippedUniformQuantization):
 
 
 class MseDirectNoPriorQuantization(ClippedUniformQuantization):
-    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False, tails=False):
-        super(MseDirectNoPriorQuantization, self).__init__(module, num_bits, symmetric, stochastic, tails)
+    def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False, tails=False):
+        super(MseDirectNoPriorQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic, tails)
 
         with torch.no_grad():
             opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor),
@@ -101,8 +101,8 @@ class MseDirectNoPriorQuantization(ClippedUniformQuantization):
 
 
 class MseUniformPriorQuantization(ClippedUniformQuantization):
-    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False):
-        super(MseUniformPriorQuantization, self).__init__(module, num_bits, symmetric, stochastic)
+    def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False):
+        super(MseUniformPriorQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic)
 
         with torch.no_grad():
             opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor), bounds=(tensor.min().item(), tensor.max().item())).x
@@ -121,8 +121,8 @@ class AciqGausQuantization(ClippedUniformQuantization):
     gaus_mult = {1: 1.24, 2: 1.71, 3: 2.15, 4: 2.55, 5: 2.93, 6: 3.28, 7: 3.61, 8: 3.92}
     gaus_mult_positive = {1: 1.71, 2: 2.15, 3: 2.55, 4: 2.93, 5: 3.28, 6: 3.61, 7: 3.92, 8: 4.2}
 
-    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False):
-        super(AciqGausQuantization, self).__init__(module, num_bits, symmetric, stochastic)
+    def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False):
+        super(AciqGausQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic)
 
         with torch.no_grad():
             if self.symmetric:
@@ -141,8 +141,8 @@ class AciqLaplaceQuantization(ClippedUniformQuantization):
     laplace_mult = {0: 1.05, 1: 1.86, 2: 2.83, 3: 3.89, 4: 5.03, 5: 6.2, 6: 7.41, 7: 8.64, 8: 9.89}
     laplace_mult_positive = {0: 1.86, 1: 2.83, 2: 3.89, 3: 5.02, 4: 6.2, 5: 7.41, 6: 8.64, 7: 9.89, 8: 11.16}
 
-    def __init__(self, module, tensor, num_bits, symmetric, stochastic=False):
-        super(AciqLaplaceQuantization, self).__init__(module, num_bits, symmetric, stochastic)
+    def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False):
+        super(AciqLaplaceQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic)
 
         with torch.no_grad():
             if symmetric:

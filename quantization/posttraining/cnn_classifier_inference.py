@@ -23,7 +23,7 @@ from pathlib import Path
 from utils.mllog import MLlogger
 from utils.meters import AverageMeter, ProgressMeter, accuracy
 from models.resnet import resnet as custom_resnet
-from quantization.posttraining.module_wrapper import ActivationModuleWrapperPost
+from quantization.posttraining.module_wrapper import ActivationModuleWrapperPost, ParameterModuleWrapperPost
 
 home = str(Path.home())
 
@@ -149,9 +149,10 @@ def main_worker(args, ml_logger):
         all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
         all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
         all_relu6 = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU6)]
-        layers = all_relu[1:-1] + all_relu6[1:-1]
-        # self.quantizable_layers = ['layer1.0.relu']  # TODO: make it more generic
-        replacement_factory = {nn.ReLU: ActivationModuleWrapperPost, nn.ReLU6: ActivationModuleWrapperPost}
+        layers = all_relu[1:-1] + all_relu6[1:-1] + all_convs[1:-1]
+        replacement_factory = {nn.ReLU: ActivationModuleWrapperPost,
+                               nn.ReLU6: ActivationModuleWrapperPost,
+                               nn.Conv2d: ParameterModuleWrapperPost}
         ModelQuantizer(model, args, layers, replacement_factory)
 
     # if args.quantize:
