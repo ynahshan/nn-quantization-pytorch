@@ -91,6 +91,20 @@ def main():
         main_worker(args, ml_logger)
 
 
+def arch2depth(arch):
+    depth = None
+    if 'resnet18' in arch:
+        depth = 18
+    elif 'resnet34' in arch:
+        depth = 34
+    elif 'resnet50' in arch:
+        depth = 50
+    elif 'resnet101' in arch:
+        depth = 101
+
+    return depth
+
+
 def main_worker(args, ml_logger):
     global best_acc1
 
@@ -99,7 +113,7 @@ def main_worker(args, ml_logger):
 
     # create model
     if 'resnet' in args.arch and args.custom_resnet:
-        model = custom_resnet(arch=args.arch, pretrained=args.pretrained, depth=18, dataset=args.dataset)
+        model = custom_resnet(arch=args.arch, pretrained=args.pretrained, depth=arch2depth(args.arch), dataset=args.dataset)
     elif args.pretrained:
         print("=> using pre-trained model '{}'".format(args.arch))
         model = models.__dict__[args.arch](pretrained=True)
