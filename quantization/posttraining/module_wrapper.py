@@ -77,6 +77,12 @@ class ActivationModuleWrapperPost(nn.Module):
 
         return out
 
+    def set_quantization(self, qtypy, kwargs, verbose=False):
+        self.out_quantization = qtypy(self, self.bits_out, symmetric=False, uint=True, kwargs=kwargs)
+        if verbose:
+            print("ActivationModuleWrapperPost - {} | {} | {}".format(self.name, str(self.out_quantization),
+                                                                      str(kwargs['device'])))
+
     def set_quant_method(self, method=None):
         if self.bits_out is not None:
             if method == 'kmeans':
