@@ -1,4 +1,5 @@
 import os, sys, time
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 import argparse
 import torch
 import torchvision.models as models
@@ -13,7 +14,6 @@ from torch.utils.data import RandomSampler
 from quantization.quantizer import ModelQuantizer
 from quantization.posttraining.module_wrapper import ActivationModuleWrapperPost, ParameterModuleWrapperPost
 from models.resnet import resnet as custom_resnet
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 
 
 model_names = sorted(name for name in models.__dict__
