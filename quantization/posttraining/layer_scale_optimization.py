@@ -1,4 +1,4 @@
-import os, sys, time
+import os, sys, time, random
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 import argparse
 import torch
@@ -11,9 +11,11 @@ from utils.data import get_dataset
 from utils.preprocess import get_transform
 from utils.meters import AverageMeter, ProgressMeter, accuracy
 from torch.utils.data import RandomSampler
+import torch.backends.cudnn as cudnn
 from quantization.quantizer import ModelQuantizer
 from quantization.posttraining.module_wrapper import ActivationModuleWrapperPost, ParameterModuleWrapperPost
 from models.resnet import resnet as custom_resnet
+from quantization.methods.clipped_uniform import FixedClipValueQuantization
 
 
 model_names = sorted(name for name in models.__dict__
@@ -38,6 +40,7 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
+parser.add_argument('-cb', '--cal-batch-size', default=64, type=int, help='Batch size for calibration')
 parser.add_argument('-p', '--print-freq', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
@@ -47,7 +50,7 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     help='use pre-trained model')
 parser.add_argument('--custom_resnet', action='store_true', help='use custom resnet implementation')
-parser.add_argument('--seed', default=12345, type=int,
+parser.add_argument('--seed', default=1, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu_ids', default=[0], type=int, nargs='+',
                     help='GPU ids to use (e.g 0 1 2 3)')
@@ -67,7 +70,7 @@ parser.add_argument('--maxfev', '-maxf', type=int, help='Maximum number of funct
 
 class CnnModel(object):
     def __init__(self, arch, use_custom_resnet, pretrained, dataset, gpu_ids, datapath, batch_size, shuffle, workers,
-                 print_freq):
+                 print_freq, cal_batch_size):
         self.arch = arch
         self.use_custom_resnet = use_custom_resnet
         self.pretrained = pretrained
@@ -78,6 +81,7 @@ class CnnModel(object):
         self.shuffle = shuffle
         self.workers = workers
         self.print_freq = print_freq
+        self.cal_batch_size = cal_batch_size
 
         # create model
         if 'resnet' in arch and use_custom_resnet:
@@ -116,8 +120,7 @@ class CnnModel(object):
 
         self.cal_loader = torch.utils.data.DataLoader(
             val_data,
-            batch_size=batch_size, shuffle=shuffle,
-            sampler=RandomSampler(val_data),
+            batch_size=self.cal_batch_size, shuffle=shuffle,
             num_workers=workers, pin_memory=True)
 
     @staticmethod
@@ -139,19 +142,25 @@ class CnnModel(object):
         self.model.eval()
 
         with torch.no_grad():
-            if not hasattr(self, 'cal_batch'):
+            if not hasattr(self, 'cal_set'):
+                self.cal_set = []
                 # TODO: Workaround, refactor this later
-                # TODO: Make it deterministic
-                images, target = next(self.cal_loader.__iter__())
-                images = images.to(self.device, non_blocking=True)
-                target = target.to(self.device, non_blocking=True)
-                self.cal_batch = (images, target)
-            images, target = self.cal_batch
+                for i, (images, target) in enumerate(self.cal_loader):
+                    if i * self.cal_batch_size >= 512:
+                        break
+                    images = images.to(self.device, non_blocking=True)
+                    target = target.to(self.device, non_blocking=True)
+                    self.cal_set.append((images, target))
 
-            # compute output
-            output = self.model(images)
-            loss = self.criterion(output, target)
-            return loss
+            res = torch.tensor([0.]).to(self.device)
+            for i in range(len(self.cal_set)):
+                images, target = self.cal_set[i]
+                # compute output
+                output = self.model(images)
+                loss = self.criterion(output, target)
+                res += loss
+
+            return res / len(self.cal_set)
 
     def validate(self):
         batch_time = AverageMeter('Time', ':6.3f')
@@ -197,7 +206,6 @@ iter = 0
 def run_inference_on_batch(scales, model, mq):
     global iter
 
-    from quantization.methods.clipped_uniform import FixedClipValueQuantization
     qwrappers = [qwrapper for (name, qwrapper) in mq.quantization_wrappers if isinstance(qwrapper, ActivationModuleWrapperPost)]
     for i, qwrapper in enumerate(qwrappers):
         if i < len(scales):
@@ -212,9 +220,19 @@ def run_inference_on_batch(scales, model, mq):
 def main():
     args = parser.parse_args()
 
+    # Fix the seed
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
     # create model
+    # Always enable shuffling to avoid issues where we get bad results due to weak statistics
     inf_model = CnnModel(args.arch, args.custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
-                     args.batch_size, args.shuffle, args.workers, args.print_freq)
+                         batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
+                         cal_batch_size=args.cal_batch_size)
 
     layers = []
     # TODO: make it more generic
@@ -244,13 +262,11 @@ def main():
     print(res)
     scales = res.x
     # evaluate
-    from quantization.methods.clipped_uniform import FixedClipValueQuantization
     qwrappers = [qwrapper for (name, qwrapper) in mq.quantization_wrappers if isinstance(qwrapper, ActivationModuleWrapperPost)]
     for i, qwrapper in enumerate(qwrappers):
         if i < len(scales):
             qwrapper.set_quantization(FixedClipValueQuantization, {'clip_value': scales[i], 'device': inf_model.device})
-    acc = inf_model.validate()
-    print("Val accuracy: {}".format(acc))
+    inf_model.validate()
     # save scales
 
 
