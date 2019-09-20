@@ -73,6 +73,8 @@ parser.add_argument('--init_method', default='static',
                     help='Scale initialization method [static, dynamic, random], default=static')
 parser.add_argument('-siv', type=float, help='Value for static initialization', default=1.)
 
+parser.add_argument('--dont_fix_np_seed', '-dfns', action='store_true', help='Do not fix np seed even if seed specified')
+
 
 class CnnModel(object):
     def __init__(self, arch, use_custom_resnet, pretrained, dataset, gpu_ids, datapath, batch_size, shuffle, workers,
@@ -262,7 +264,8 @@ def main():
 
     # Fix the seed
     random.seed(args.seed)
-    np.random.seed(args.seed)
+    if not args.dont_fix_np_seed:
+        np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
     cudnn.deterministic = True
