@@ -2,19 +2,18 @@ import os
 import torch.nn as nn
 import torch
 from quantization.methods.clipped_uniform import MaxAbsStaticQuantization, AciqLaplaceQuantization, AciqGausQuantization
-from quantization.methods.clipped_uniform import MseDirectQuantization, MseDirectNoPriorQuantization, MseUniformPriorQuantization
-from quantization.methods.clipped_uniform import AngDistanceQuantization, L3NormQuantization, L4NormQuantization, LpNormQuantization
+from quantization.methods.clipped_uniform import MseNoPriorQuantization, MseUniformPriorQuantization
+from quantization.methods.clipped_uniform import AngDistanceQuantization, L3NormQuantization, L2NormQuantization, LpNormQuantization
 from quantization.methods.non_uniform import KmeansQuantization
 
 quantization_mapping = {'max_static': MaxAbsStaticQuantization,
                         'aciq_laplace': AciqLaplaceQuantization,
                         'aciq_gaus': AciqGausQuantization,
-                        'mse_direct': MseDirectQuantization,
                         'mse_uniform_prior': MseUniformPriorQuantization,
-                        'mse_direct_no_prior': MseDirectNoPriorQuantization,
+                        'mse_no_prior': MseNoPriorQuantization,
                         'ang_dis': AngDistanceQuantization,
                         'l3_norm': L3NormQuantization,
-                        'l4_norm': L4NormQuantization,
+                        'l2_norm': L2NormQuantization,
                         'lp_norm': LpNormQuantization
                         }
 
@@ -76,6 +75,9 @@ class ActivationModuleWrapperPost(nn.Module):
         # torch.save(out, os.path.join('dump', self.name + '_out' + '.pt'))
 
         return out
+
+    def get_quantization(self):
+        return self.out_quantization
 
     def set_quantization(self, qtypy, kwargs, verbose=False):
         self.out_quantization = qtypy(self, self.bits_out, symmetric=False, uint=True, kwargs=kwargs)

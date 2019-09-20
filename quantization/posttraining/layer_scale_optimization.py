@@ -7,6 +7,7 @@ import scipy.optimize as opt
 from pathlib import Path
 import numpy as np
 import torch.nn as nn
+from itertools import count
 from utils.data import get_dataset
 from utils.preprocess import get_transform
 from utils.meters import AverageMeter, ProgressMeter, accuracy
@@ -50,7 +51,7 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     help='use pre-trained model')
 parser.add_argument('--custom_resnet', action='store_true', help='use custom resnet implementation')
-parser.add_argument('--seed', default=1, type=int,
+parser.add_argument('--seed', default=0, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu_ids', default=[0], type=int, nargs='+',
                     help='GPU ids to use (e.g 0 1 2 3)')
@@ -66,6 +67,10 @@ parser.add_argument('-lp', type=float, help='p parameter of Lp norm', default=3.
 parser.add_argument('--min_method', '-mm', help='Minimization method to use [Nelder-Mead, Powell, COBYLA]', default='COBYLA')
 parser.add_argument('--maxiter', '-maxi', type=int, help='Maximum number of iterations to minimize algo', default=None)
 parser.add_argument('--maxfev', '-maxf', type=int, help='Maximum number of function evaluations of minimize algo', default=None)
+
+parser.add_argument('--init_method', default='static',
+                    help='Scale initialization method [static, dynamic, random], default=static')
+parser.add_argument('-siv', type=float, help='Value for static initialization', default=1.)
 
 
 class CnnModel(object):
@@ -202,19 +207,52 @@ class CnnModel(object):
 
         return top1.avg
 
-iter = 0
+
+# TODO: refactor this
+_eval_count = count(0)
+_min_loss = 1e6
+
+
 def run_inference_on_batch(scales, model, mq):
-    global iter
+    global _eval_count, _min_loss
+    eval_count = next(_eval_count)
 
     qwrappers = [qwrapper for (name, qwrapper) in mq.quantization_wrappers if isinstance(qwrapper, ActivationModuleWrapperPost)]
     for i, qwrapper in enumerate(qwrappers):
         if i < len(scales):
             qwrapper.set_quantization(FixedClipValueQuantization, {'clip_value': scales[i], 'device': model.device},
-                                      verbose=(iter % 20 == 0))
-    loss = model.evaluate_calibration()
-    print("iter: {}, loss: {}".format(iter, loss.item()))
-    iter += 1
-    return loss.item()
+                                      verbose=(eval_count % 300 == 0))
+    loss = model.evaluate_calibration().item()
+
+    if loss < _min_loss:
+        _min_loss = loss
+
+    print_freq = 20
+    if eval_count % 20 == 0:
+        print("func eval iteration: {}, minimum loss of last {} iterations: {:.4f}".format(
+            eval_count, print_freq, _min_loss))
+
+    return loss
+
+
+def set_clipping(mq, clipping, device):
+    qwrappers = [qwrapper for (name, qwrapper) in mq.quantization_wrappers if
+                 isinstance(qwrapper, ActivationModuleWrapperPost)]
+    for i, qwrapper in enumerate(qwrappers):
+        qwrapper.set_quantization(FixedClipValueQuantization,
+                                  {'clip_value': clipping[i], 'device': device})
+
+
+def get_clipping(mq):
+    clipping = []
+    qwrappers = [qwrapper for (name, qwrapper) in mq.quantization_wrappers if
+                 isinstance(qwrapper, ActivationModuleWrapperPost)]
+    for i, qwrapper in enumerate(qwrappers):
+        q = qwrapper.get_quantization()
+        clip_value = getattr(q, 'alpha')
+        clipping.append(clip_value)
+
+    return np.array(clipping)
 
 
 def main():
@@ -249,23 +287,68 @@ def main():
     mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
     # mq.log_quantizer_state(ml_logger, -1)
 
+    print("init_method: {}, qtype {}".format(args.init_method, args.qtype))
     # initialize scales
-    init = np.array([1.]*len(layers))  # TODO: allow better initialization like mse based or aciq
+    if args.init_method == 'dynamic':
+        # evaluate to initialize dynamic clipping
+        loss = inf_model.evaluate_calibration()
+        print("Initial loss: {:.4f}".format(loss.item()))
+
+        # get clipping values
+        init = get_clipping(mq)
+    else:
+        if args.init_method == 'static':
+            init = np.array([args.siv] * len(layers))
+        elif args.init_method == 'random':
+            init = np.random.uniform(0.5, 1.5, size=len(layers))  # TODO: pass range by argument
+        else:
+            raise RuntimeError("Invalid argument init_method {}".format(args.init_method))
+
+        # set clip value to qwrappers
+        set_clipping(mq, init, inf_model.device)
+        print("scales initialization: {}".format(str(init)))
+
+        # evaluate with clipping
+        loss = inf_model.evaluate_calibration()
+        print("Initial loss: {:.4f}".format(loss.item()))
+
+    # evaluate
+    inf_model.validate()
+
     # run optimizer
     min_options = {}
     if args.maxiter is not None:
         min_options['maxiter'] = args.maxiter
     if args.maxfev is not None:
         min_options['maxfev'] = args.maxfev
+
+    _iter = count(0)
+
+    def local_search_callback(x):
+        it = next(_iter)
+        loss = run_inference_on_batch(x, inf_model, mq)
+        print("\n[{}]: Local search callback".format(it))
+        print("loss: {:.4f}\n".format(loss))
+
     res = opt.minimize(lambda scales: run_inference_on_batch(scales, inf_model, mq), np.array(init),
-                       method=args.min_method, options=min_options)
+                       method=args.min_method, options=min_options, callback=local_search_callback)
+
+    # def annealing_callback(x, f, context):
+    #     print("Annealing callback")
+    #     print(x)
+    #     print("loss: {:.4f}".format(f))
+    #     print("context: {}".format(context))
+    # res = opt.dual_annealing(lambda scales: run_inference_on_batch(scales, inf_model, mq), maxiter=10, visit=2,
+    #                          bounds=[(0., 2.)]*len(layers), x0=init, callback=annealing_callback, accept=1e3,
+    #                          local_search_options={'method': 'Powell', 'options': {'maxiter': 1, 'disp': True},
+    #                                                'callback': local_search_callback})
     print(res)
     scales = res.x
-    # evaluate
     qwrappers = [qwrapper for (name, qwrapper) in mq.quantization_wrappers if isinstance(qwrapper, ActivationModuleWrapperPost)]
     for i, qwrapper in enumerate(qwrappers):
         if i < len(scales):
             qwrapper.set_quantization(FixedClipValueQuantization, {'clip_value': scales[i], 'device': inf_model.device})
+    # evaluate
     inf_model.validate()
     # save scales
 
