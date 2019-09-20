@@ -41,7 +41,8 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('-cb', '--cal-batch-size', default=64, type=int, help='Batch size for calibration')
+parser.add_argument('-cb', '--cal-batch-size', default=256, type=int, help='Batch size for calibration')
+parser.add_argument('-cs', '--cal-set-size', default=256, type=int, help='Batch size for calibration')
 parser.add_argument('-p', '--print-freq', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
@@ -75,7 +76,7 @@ parser.add_argument('-siv', type=float, help='Value for static initialization', 
 
 class CnnModel(object):
     def __init__(self, arch, use_custom_resnet, pretrained, dataset, gpu_ids, datapath, batch_size, shuffle, workers,
-                 print_freq, cal_batch_size):
+                 print_freq, cal_batch_size, cal_set_size):
         self.arch = arch
         self.use_custom_resnet = use_custom_resnet
         self.pretrained = pretrained
@@ -87,6 +88,7 @@ class CnnModel(object):
         self.workers = workers
         self.print_freq = print_freq
         self.cal_batch_size = cal_batch_size
+        self.cal_set_size = cal_set_size  # TODO: pass it as cmd line argument
 
         # create model
         if 'resnet' in arch and use_custom_resnet:
@@ -151,7 +153,7 @@ class CnnModel(object):
                 self.cal_set = []
                 # TODO: Workaround, refactor this later
                 for i, (images, target) in enumerate(self.cal_loader):
-                    if i * self.cal_batch_size >= 512:
+                    if i * self.cal_batch_size >= self.cal_set_size:
                         break
                     images = images.to(self.device, non_blocking=True)
                     target = target.to(self.device, non_blocking=True)
@@ -270,7 +272,7 @@ def main():
     # Always enable shuffling to avoid issues where we get bad results due to weak statistics
     inf_model = CnnModel(args.arch, args.custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                         cal_batch_size=args.cal_batch_size)
+                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
 
     layers = []
     # TODO: make it more generic
@@ -300,7 +302,7 @@ def main():
         if args.init_method == 'static':
             init = np.array([args.siv] * len(layers))
         elif args.init_method == 'random':
-            init = np.random.uniform(0.5, 1.5, size=len(layers))  # TODO: pass range by argument
+            init = np.random.uniform(0.5, 1., size=len(layers))  # TODO: pass range by argument
         else:
             raise RuntimeError("Invalid argument init_method {}".format(args.init_method))
 
