@@ -65,7 +65,7 @@ parser.add_argument('--pre_relu', dest='pre_relu', action='store_true', help='us
 parser.add_argument('--qtype', default='aciq_laplace', help='Type of quantization method')
 parser.add_argument('-lp', type=float, help='p parameter of Lp norm', default=3.)
 
-parser.add_argument('--min_method', '-mm', help='Minimization method to use [Nelder-Mead, Powell, COBYLA]', default='COBYLA')
+parser.add_argument('--min_method', '-mm', help='Minimization method to use [Nelder-Mead, Powell, COBYLA]', default='Powell')
 parser.add_argument('--maxiter', '-maxi', type=int, help='Maximum number of iterations to minimize algo', default=None)
 parser.add_argument('--maxfev', '-maxf', type=int, help='Maximum number of function evaluations of minimize algo', default=None)
 
