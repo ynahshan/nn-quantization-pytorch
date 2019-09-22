@@ -145,6 +145,9 @@ class ModelQuantizer:
                 for name, qwrapper in self.quantization_wrappers:
                     qwrapper.log_state(step, ml_logger)
 
+    def get_qwrappers(self):
+        return [qwrapper for (name, qwrapper) in self.quantization_wrappers if qwrapper.__enabled__()]
+
     class QuantMethod:
         def __init__(self, quantization_wrappers, method):
             self.quantization_wrappers = quantization_wrappers

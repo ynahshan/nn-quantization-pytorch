@@ -221,7 +221,7 @@ def run_inference_on_batch(scales, model, mq):
     global _eval_count, _min_loss
     eval_count = next(_eval_count)
 
-    qwrappers = [qwrapper for (name, qwrapper) in mq.quantization_wrappers if isinstance(qwrapper, ActivationModuleWrapperPost)]
+    qwrappers = mq.get_qwrappers()
     for i, qwrapper in enumerate(qwrappers):
         if i < len(scales):
             qwrapper.set_quantization(FixedClipValueQuantization, {'clip_value': scales[i], 'device': model.device},
@@ -240,8 +240,7 @@ def run_inference_on_batch(scales, model, mq):
 
 
 def set_clipping(mq, clipping, device):
-    qwrappers = [qwrapper for (name, qwrapper) in mq.quantization_wrappers if
-                 isinstance(qwrapper, ActivationModuleWrapperPost)]
+    qwrappers = mq.get_qwrappers()
     for i, qwrapper in enumerate(qwrappers):
         qwrapper.set_quantization(FixedClipValueQuantization,
                                   {'clip_value': clipping[i], 'device': device})
@@ -249,8 +248,7 @@ def set_clipping(mq, clipping, device):
 
 def get_clipping(mq):
     clipping = []
-    qwrappers = [qwrapper for (name, qwrapper) in mq.quantization_wrappers if
-                 isinstance(qwrapper, ActivationModuleWrapperPost)]
+    qwrappers = mq.get_qwrappers()
     for i, qwrapper in enumerate(qwrappers):
         q = qwrapper.get_quantization()
         clip_value = getattr(q, 'alpha')
@@ -338,18 +336,9 @@ def main():
     res = opt.minimize(lambda scales: run_inference_on_batch(scales, inf_model, mq), np.array(init),
                        method=args.min_method, options=min_options, callback=local_search_callback)
 
-    # def annealing_callback(x, f, context):
-    #     print("Annealing callback")
-    #     print(x)
-    #     print("loss: {:.4f}".format(f))
-    #     print("context: {}".format(context))
-    # res = opt.dual_annealing(lambda scales: run_inference_on_batch(scales, inf_model, mq), maxiter=10, visit=2,
-    #                          bounds=[(0., 2.)]*len(layers), x0=init, callback=annealing_callback, accept=1e3,
-    #                          local_search_options={'method': 'Powell', 'options': {'maxiter': 1, 'disp': True},
-    #                                                'callback': local_search_callback})
     print(res)
     scales = res.x
-    qwrappers = [qwrapper for (name, qwrapper) in mq.quantization_wrappers if isinstance(qwrapper, ActivationModuleWrapperPost)]
+    qwrappers = mq.get_qwrappers()
     for i, qwrapper in enumerate(qwrappers):
         if i < len(scales):
             qwrapper.set_quantization(FixedClipValueQuantization, {'clip_value': scales[i], 'device': inf_model.device})

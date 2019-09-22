@@ -125,6 +125,7 @@ class ParameterModuleWrapperPost(nn.Module):
         self.log_weights_mse = False
         self.log_clustering = False
         self.bn = kwargs['bn'] if 'bn' in kwargs else None
+        self.dynamic_weight_quantization = True
 
         setattr(self, 'weight', wrapped_module.weight)
         setattr(self, 'bias', wrapped_module.bias)
@@ -153,11 +154,23 @@ class ParameterModuleWrapperPost(nn.Module):
         w = self.weight
         if self.__enabled__():
             # Quantize weights
-            w = self.weight_q
+            if self.dynamic_weight_quantization:
+                w = self.weight_quantization(self.weight)
+            else:
+                w = self.weight_q
 
         out = self.forward_functor(*input, weight=w, bias=self.bias)
 
         return out
+
+    def get_quantization(self):
+        return self.weight_quantization
+
+    def set_quantization(self, qtypy, kwargs, verbose=False):
+        self.weight_quantization = qtypy(self, self.bit_weights, symmetric=True, uint=True, kwargs=kwargs)
+        if verbose:
+            print("ParameterModuleWrapperPost - {} | {} | {}".format(self.name, str(self.weight_quantization),
+                                                                      str(kwargs['device'])))
 
     def set_quant_method(self, method=None):
         if self.bit_weights is not None:
