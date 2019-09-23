@@ -17,6 +17,7 @@ from quantization.quantizer import ModelQuantizer
 from quantization.posttraining.module_wrapper import ActivationModuleWrapperPost, ParameterModuleWrapperPost
 from models.resnet import resnet as custom_resnet
 from quantization.methods.clipped_uniform import FixedClipValueQuantization
+from utils.mllog import MLlogger
 
 
 model_names = sorted(name for name in models.__dict__
@@ -257,9 +258,7 @@ def get_clipping(mq):
     return np.array(clipping)
 
 
-def main():
-    args = parser.parse_args()
-
+def main(args, ml_logger):
     # Fix the seed
     random.seed(args.seed)
     if not args.dont_fix_np_seed:
@@ -316,7 +315,8 @@ def main():
         print("Initial loss: {:.4f}".format(loss.item()))
 
     # evaluate
-    inf_model.validate()
+    acc = inf_model.validate()
+    ml_logger.log_metric('Acc {}'.format(args.qtype), acc, step='auto')
 
     # run optimizer
     min_options = {}
@@ -343,9 +343,20 @@ def main():
         if i < len(scales):
             qwrapper.set_quantization(FixedClipValueQuantization, {'clip_value': scales[i], 'device': inf_model.device})
     # evaluate
-    inf_model.validate()
+    acc = inf_model.validate()
+    ml_logger.log_metric('Acc Powell', acc, step='auto')
     # save scales
 
 
 if __name__ == '__main__':
-    main()
+    args = parser.parse_args()
+    if args.cal_batch_size > args.batch_size:
+        print("Changing cal_batch_size parameter from {} to {}".format(args.cal_batch_size, args.batch_size))
+        args.cal_batch_size = args.batch_size
+    if args.cal_set_size > args.batch_size:
+        print("Changing cal_set_size parameter from {} to {}".format(args.cal_set_size, args.batch_size))
+        args.cal_set_size = args.batch_size
+
+    with MLlogger(os.path.join(home, 'mxt-sim/mllog_runs'), args.experiment, args,
+                  name_args=[args.arch, args.dataset, "W{}A{}".format(args.bit_weights, args.bit_act)]) as ml_logger:
+        main(args, ml_logger)
