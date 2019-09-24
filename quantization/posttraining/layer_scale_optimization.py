@@ -42,8 +42,8 @@ parser.add_argument('-b', '--batch-size', default=256, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('-cb', '--cal-batch-size', default=256, type=int, help='Batch size for calibration')
-parser.add_argument('-cs', '--cal-set-size', default=256, type=int, help='Batch size for calibration')
+parser.add_argument('-cb', '--cal-batch-size', default=None, type=int, help='Batch size for calibration')
+parser.add_argument('-cs', '--cal-set-size', default=None, type=int, help='Batch size for calibration')
 parser.add_argument('-p', '--print-freq', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
@@ -316,7 +316,7 @@ def main(args, ml_logger):
 
     # evaluate
     acc = inf_model.validate()
-    ml_logger.log_metric('Acc {}'.format(args.qtype), acc, step='auto')
+    ml_logger.log_metric('Acc init', acc, step='auto')
 
     # run optimizer
     min_options = {}
@@ -350,11 +350,12 @@ def main(args, ml_logger):
 
 if __name__ == '__main__':
     args = parser.parse_args()
+    if args.cal_batch_size is None:
+        args.cal_batch_size = args.batch_size
     if args.cal_batch_size > args.batch_size:
         print("Changing cal_batch_size parameter from {} to {}".format(args.cal_batch_size, args.batch_size))
         args.cal_batch_size = args.batch_size
-    if args.cal_set_size > args.batch_size:
-        print("Changing cal_set_size parameter from {} to {}".format(args.cal_set_size, args.batch_size))
+    if args.cal_set_size is None:
         args.cal_set_size = args.batch_size
 
     with MLlogger(os.path.join(home, 'mxt-sim/mllog_runs'), args.experiment, args,
