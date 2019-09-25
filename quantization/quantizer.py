@@ -4,7 +4,7 @@ import numpy as np
 from itertools import count
 from quantization.methods.clipped_uniform import LearnedStepSizeQuantization
 from quantization.methods.non_uniform import LearnableDifferentiableQuantization, LearnedCentroidsQuantization
-from utils.absorb_bn import is_absorbing, is_bn
+# from utils.absorb_bn import is_absorbing, is_bn
 
 
 class Conv2dFunctor:
@@ -14,6 +14,15 @@ class Conv2dFunctor:
     def __call__(self, *input, weight, bias):
         res = torch.nn.functional.conv2d(*input, weight, bias, self.conv2d.stride, self.conv2d.padding,
                                          self.conv2d.dilation, self.conv2d.groups)
+        return res
+
+
+class LinearFunctor:
+    def __init__(self, linear):
+        self.linear = linear
+
+    def __call__(self, *input, weight, bias):
+        res = torch.nn.functional.linear(*input, weight, bias)
         return res
 
 
@@ -68,7 +77,7 @@ class ModelQuantizer:
         self.bit_weights = args.bit_weights
         self.bit_act = args.bit_act
         self.post_relu = not args.pre_relu
-        self.functor_map = {nn.Conv2d: Conv2dFunctor}
+        self.functor_map = {nn.Conv2d: Conv2dFunctor, nn.Linear: LinearFunctor}
         self.replacement_factory = replacement_factory
 
         self.quantization_scheduler = quantization_scheduler
@@ -117,9 +126,9 @@ class ModelQuantizer:
     def _pre_process_container(self, container, prefix=''):
         prev, prev_name = None, None
         for name, module in container.named_children():
-            if is_bn(module) and is_absorbing(prev) and prev_name in self.quantizable_layers:
-                # Pass BN module to prev module quantization wrapper for BN folding/unfolding
-                self.quantizable_modules[-1].bn = module
+            # if is_bn(module) and is_absorbing(prev) and prev_name in self.quantizable_layers:
+            #     # Pass BN module to prev module quantization wrapper for BN folding/unfolding
+            #     self.quantizable_modules[-1].bn = module
 
             full_name = prefix + name
             if full_name in self.quantizable_layers:

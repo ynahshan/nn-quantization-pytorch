@@ -139,8 +139,9 @@ class ParameterModuleWrapperPost(nn.Module):
             if self.quantization_scheduler is not None:
                 self.quantization_scheduler.add_quantization_params(self.weight_quantization.optim_parameters())
 
-            self.weight_q = self.weight_quantization(self.weight)
-            self.weight_mse = torch.mean((self.weight_q - self.weight)**2).item()
+            if not self.dynamic_weight_quantization:
+                self.weight_q = self.weight_quantization(self.weight)
+                self.weight_mse = torch.mean((self.weight_q - self.weight)**2).item()
             print("ParameterModuleWrapperPost - {} | {} | {}".format(self.name, str(self.weight_quantization),
                                                                       str(self.weight.device)))
 
