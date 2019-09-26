@@ -338,10 +338,9 @@ def main(args, ml_logger):
 
     print(res)
     scales = res.x
-    qwrappers = mq.get_qwrappers()
-    for i, qwrapper in enumerate(qwrappers):
-        if i < len(scales):
-            qwrapper.set_quantization(FixedClipValueQuantization, {'clip_value': scales[i], 'device': inf_model.device})
+
+    set_clipping(mq, scales, inf_model.device)
+
     # evaluate
     acc = inf_model.validate()
     ml_logger.log_metric('Acc Powell', acc, step='auto')
