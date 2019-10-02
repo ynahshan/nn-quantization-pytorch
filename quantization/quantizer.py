@@ -26,6 +26,17 @@ class LinearFunctor:
         return res
 
 
+class EmbeddingFunctor:
+    def __init__(self, embedding):
+        self.embedding = embedding
+
+    def __call__(self, *input, weight, bias=None):
+        res = torch.nn.functional.embedding(
+            *input, weight, self.embedding.padding_idx, self.embedding.max_norm,
+            self.embedding.norm_type, self.embedding.scale_grad_by_freq, self.embedding.sparse)
+        return res
+
+
 class QuantizationScheduler(object):
     _iter_counter = count(0)
 
@@ -77,7 +88,7 @@ class ModelQuantizer:
         self.bit_weights = args.bit_weights
         self.bit_act = args.bit_act
         self.post_relu = not args.pre_relu
-        self.functor_map = {nn.Conv2d: Conv2dFunctor, nn.Linear: LinearFunctor}
+        self.functor_map = {nn.Conv2d: Conv2dFunctor, nn.Linear: LinearFunctor, nn.Embedding: EmbeddingFunctor}
         self.replacement_factory = replacement_factory
 
         self.quantization_scheduler = quantization_scheduler

@@ -18,6 +18,10 @@ quantization_mapping = {'max_static': MaxAbsStaticQuantization,
                         }
 
 
+def is_positive(module):
+    return isinstance(module, nn.ReLU) or isinstance(module, nn.ReLU6)
+
+
 class ActivationModuleWrapperPost(nn.Module):
     def __init__(self, name, wrapped_module, quantization_scheduler, **kwargs):
         super(ActivationModuleWrapperPost, self).__init__()
@@ -31,12 +35,12 @@ class ActivationModuleWrapperPost(nn.Module):
         self.active = True
 
         if self.bits_out is not None:
-
             self.out_quantization = self.out_quantization_default = None
 
             def __init_out_quantization__(tensor):
                 self.out_quantization_default = quantization_mapping[self.qtype](self, tensor, self.bits_out,
-                                                                                 symmetric=False, uint=True, kwargs=kwargs)
+                                                                                 symmetric=(not is_positive(wrapped_module)),
+                                                                                 uint=True, kwargs=kwargs)
                 self.out_quantization = self.out_quantization_default
 
                 if self.quantization_scheduler is not None:
@@ -80,7 +84,8 @@ class ActivationModuleWrapperPost(nn.Module):
         return self.out_quantization
 
     def set_quantization(self, qtypy, kwargs, verbose=False):
-        self.out_quantization = qtypy(self, self.bits_out, symmetric=False, uint=True, kwargs=kwargs)
+        self.out_quantization = qtypy(self, self.bits_out, symmetric=(not is_positive(self.wrapped_module)),
+                                      uint=True, kwargs=kwargs)
         if verbose:
             print("ActivationModuleWrapperPost - {} | {} | {}".format(self.name, str(self.out_quantization),
                                                                       str(kwargs['device'])))
@@ -128,9 +133,10 @@ class ParameterModuleWrapperPost(nn.Module):
         self.dynamic_weight_quantization = True
 
         setattr(self, 'weight', wrapped_module.weight)
-        setattr(self, 'bias', wrapped_module.bias)
         delattr(wrapped_module, 'weight')
-        delattr(wrapped_module, 'bias')
+        if hasattr(wrapped_module, 'bias'):
+            setattr(self, 'bias', wrapped_module.bias)
+            delattr(wrapped_module, 'bias')
 
         if self.bit_weights is not None:
             self.weight_quantization_default = quantization_mapping[self.qtype](self, self.weight, self.bit_weights,
@@ -160,7 +166,7 @@ class ParameterModuleWrapperPost(nn.Module):
             else:
                 w = self.weight_q
 
-        out = self.forward_functor(*input, weight=w, bias=self.bias)
+        out = self.forward_functor(*input, weight=w, bias=(self.bias if hasattr(self, 'bias') else None))
 
         return out
 
