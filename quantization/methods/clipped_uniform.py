@@ -164,6 +164,31 @@ class MseNoPriorQuantization(ClippedUniformQuantization):
         return mse.item()
 
 
+class LogLikeQuantization(ClippedUniformQuantization):
+    def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False, tails=False, kwargs={}):
+        super(LogLikeQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic, tails)
+
+        with torch.no_grad():
+            if symmetric:
+                self.b = tensor.abs().mean()
+            else:
+                # We need to measure b before ReLu.
+                # Instead assume zero mean and multiply b after relu by 2 to approximation b before relu.
+                self.b = tensor[tensor != 0].abs().mean()
+
+        with torch.no_grad():
+            opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor),
+                                            bounds=(tensor.min().item(), tensor.max().item())).x
+
+        self.register_buffer(self.alpha_param_name, tensor.new_tensor([opt_alpha]))
+
+    def estimate_quant_error(self, alpha, x):
+        Nq = x[x > 0 & x <= alpha].numel()
+        clip_err = (x[x > alpha]/self.b).sum()
+        q_err = Nq * np.log(alpha)
+        return clip_err.item() + q_err
+
+
 class MseUniformPriorQuantization(ClippedUniformQuantization):
     def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False, kwargs={}):
         super(MseUniformPriorQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic)

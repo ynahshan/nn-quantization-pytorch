@@ -1,9 +1,13 @@
 import os
 import torch.nn as nn
 import torch
-from quantization.methods.clipped_uniform import MaxAbsStaticQuantization, AciqLaplaceQuantization, AciqGausQuantization
+import torch.nn as nn
+
+from quantization.methods.clipped_uniform import AngDistanceQuantization, L3NormQuantization, L2NormQuantization, \
+    LpNormQuantization
+from quantization.methods.clipped_uniform import MaxAbsStaticQuantization, AciqLaplaceQuantization, \
+    AciqGausQuantization, LogLikeQuantization
 from quantization.methods.clipped_uniform import MseNoPriorQuantization, MseUniformPriorQuantization
-from quantization.methods.clipped_uniform import AngDistanceQuantization, L3NormQuantization, L2NormQuantization, LpNormQuantization
 from quantization.methods.non_uniform import KmeansQuantization
 
 quantization_mapping = {'max_static': MaxAbsStaticQuantization,
@@ -14,7 +18,8 @@ quantization_mapping = {'max_static': MaxAbsStaticQuantization,
                         'ang_dis': AngDistanceQuantization,
                         'l3_norm': L3NormQuantization,
                         'l2_norm': L2NormQuantization,
-                        'lp_norm': LpNormQuantization
+                        'lp_norm': LpNormQuantization,
+                        'log_like': LogLikeQuantization
                         }
 
 
