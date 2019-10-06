@@ -1,3 +1,4 @@
+import numpy as np
 import scipy.optimize as opt
 import torch
 
@@ -177,15 +178,17 @@ class LogLikeQuantization(ClippedUniformQuantization):
                 self.b = tensor[tensor != 0].abs().mean()
 
         with torch.no_grad():
-            opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor),
-                                            bounds=(tensor.min().item(), tensor.max().item())).x
+            opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor)).x
 
         self.register_buffer(self.alpha_param_name, tensor.new_tensor([opt_alpha]))
 
     def estimate_quant_error(self, alpha, x):
-        Nq = x[x > 0 & x <= alpha].numel()
-        clip_err = (x[x > alpha]/self.b).sum()
-        q_err = Nq * np.log(alpha)
+        delta = (2 if self.symmetric else 1) * alpha / (self.num_bins - 1)
+        Nq = x[(x > 0) & (x <= alpha)].numel()
+        Nc = x[x > alpha].numel()
+        clip_err = ((x[x > alpha]- alpha) / self.b).sum() + Nc * torch.log(torch.clamp(self.b, 1e-30, 1e+30))
+        q_err = Nq * np.log(np.max([delta, 1e-100]))
+        # print("alpha={}, delta={}, q={}, c={}, tot={}".format(alpha,delta,q_err, clip_err.item(),clip_err.item() + q_err + add))
         return clip_err.item() + q_err
 
 
