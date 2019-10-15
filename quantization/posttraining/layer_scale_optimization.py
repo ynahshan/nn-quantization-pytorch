@@ -257,6 +257,11 @@ def get_clipping(mq):
 
     return np.array(clipping)
 
+def coord_descent(fun, x0, args, **kwargs):
+    # TODO: Implement coordinate descent here
+    res = opt.OptimizeResult()
+    return res
+
 
 def main(args, ml_logger):
     # Fix the seed
@@ -333,8 +338,9 @@ def main(args, ml_logger):
         print("\n[{}]: Local search callback".format(it))
         print("loss: {:.4f}\n".format(loss))
 
+    method = coord_descent if args.min_method == 'CD' else args.min_method
     res = opt.minimize(lambda scales: run_inference_on_batch(scales, inf_model, mq), np.array(init),
-                       method=args.min_method, options=min_options, callback=local_search_callback)
+                       method=method, options=min_options, callback=local_search_callback)
 
     print(res)
     scales = res.x
