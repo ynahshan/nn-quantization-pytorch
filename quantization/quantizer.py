@@ -4,6 +4,7 @@ import numpy as np
 from itertools import count
 from quantization.methods.clipped_uniform import LearnedStepSizeQuantization
 from quantization.methods.non_uniform import LearnableDifferentiableQuantization, LearnedCentroidsQuantization
+from quantization.methods.clipped_uniform import FixedClipValueQuantization
 # from utils.absorb_bn import is_absorbing, is_bn
 
 
@@ -167,6 +168,22 @@ class ModelQuantizer:
 
     def get_qwrappers(self):
         return [qwrapper for (name, qwrapper) in self.quantization_wrappers if qwrapper.__enabled__()]
+
+    def set_clipping(self, clipping, device):  # TODO: handle device internally somehow
+        qwrappers = self.get_qwrappers()
+        for i, qwrapper in enumerate(qwrappers):
+            qwrapper.set_quantization(FixedClipValueQuantization,
+                                      {'clip_value': clipping[i], 'device': device})
+
+    def get_clipping(self):
+        clipping = []
+        qwrappers = self.get_qwrappers()
+        for i, qwrapper in enumerate(qwrappers):
+            q = qwrapper.get_quantization()
+            clip_value = getattr(q, 'alpha')
+            clipping.append(clip_value.item())
+
+        return qwrappers[0].get_quantization().alpha.new_tensor(clipping)
 
     class QuantMethod:
         def __init__(self, quantization_wrappers, method):
