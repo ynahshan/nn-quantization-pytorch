@@ -153,8 +153,12 @@ def main(args, ml_logger):
     n = args.num_points
     for i in range(num_iter):
         gamma, T = separability_index(lambda x: model_func(x, init, inf_model, mq), len(init), n, gpu=True, gamma_expecation=True)
-        gamma_avg += gamma.mean().abs()
+        gamma_avg += gamma.abs()
         T_avg += T.abs()
+
+        print("gamma^2: {}, T: {}".format(gamma.abs(), T))
+        ml_logger.log_metric('gamma_sample', gamma.abs().cpu().item(), step='auto')
+        ml_logger.log_metric('gamma_avg', gamma_avg.cpu().item() / (i + 1), step='auto')
 
     gamma = gamma_avg.cpu().item() / num_iter
     T = T_avg.cpu().item() / num_iter
