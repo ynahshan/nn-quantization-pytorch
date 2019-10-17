@@ -142,6 +142,7 @@ def main(args, ml_logger):
 
     loss = inf_model.evaluate_calibration()
     print("loss: {:.4f}".format(loss.item()))
+    ml_logger.log_metric('loss', loss.item(), step='auto')
 
     # get clipping values
     init = mq.get_clipping()
