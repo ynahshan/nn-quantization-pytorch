@@ -67,34 +67,57 @@ parser.add_argument('--num_iter', '-i', type=int, help='Number of bits for activ
 parser.add_argument('--num_points', '-n', type=int, help='Number of bits for activations', default=100)
 
 
-def separability_index(f, m, n, gpu=False, gamma_expecation=True):
-    x, z = torch.tensor(np.random.uniform(0, 1, size=(n, m))).float(), torch.tensor(np.random.uniform(0, 1, size=(n, m))).float()
-    if gpu:
-        x = x.cuda()
-        z = z.cuda()
+def separability_index(f, m, n, k=1, gpu=False, status_callback=None):
+    g = None
+    max_ = None
+    gamma_ = []
+    T_ = []
+    for j in range(k):
+        x, z = torch.tensor(np.random.uniform(0, 1, size=(n, m))).float(), torch.tensor(
+            np.random.uniform(0, 1, size=(n, m))).float()
+        if gpu:
+            x = x.cuda()
+            z = z.cuda()
 
-    print("Calaculate f(x)")
-    t0 = f(x)
-    print("Calaculate f(z)")
-    t1 = t0 + (m - 1)*f(z)
+        print("Calaculate f(x)")
+        fx = f(x).double()
+        if max_ is None:
+            max_ = fx.max()
+        else:
+            max_ = torch.max(max_, fx.max())
+        print("Calaculate f(z)")
+        fz = f(z).double()
+        max_ = torch.max(max_, fz.max())
 
-    print("Calaculate f(xj,zj')")
-    t2 = t1.new_zeros((n,))
-    for i in range(m):
-        y = z.clone()
-        y[:,i] = x[:,i]
-        t2 += f(y)
+        t1 = fx + (m - 1) * fz
 
-    g = t0 * (t1 - t2)
-    gamma = g.mean()
+        print("Calaculate f(xj,zj')")
+        t2 = t1.new_zeros((n,), dtype=torch.float64)
+        for i in range(m):
+            y = z.clone()
+            y[:, i] = x[:, i]
+            fy = f(y).double()
+            max_ = torch.max(max_, fy.max())
+            t2 += fy
 
-    s = torch.sqrt(torch.sum((g - gamma)**2) / (n - 1))
-    T = np.sqrt(n) * gamma / max(s, 1e-8)
+        g_ = fx * (t1 - t2)
+        if g is None:
+            g = g_
+        else:
+            g = torch.cat([g, g_], dim=0)
 
-    if gamma_expecation:
-        return gamma, T
-    else:
-        return g, T
+        gamma = g.mean()
+        gamma_.append(gamma.cpu().item())
+
+        s = torch.sqrt(torch.sum((g - gamma) ** 2) / (g.numel() - 1))
+        T = np.sqrt(g.numel()) * gamma / max(s, 1e-2)
+        print(s)
+        T_.append(T.cpu().item())
+
+        if status_callback is not None:
+            status_callback(j, gamma, T, max_)
+
+    return gamma_, T_, max_
 
 # assum x is matrix (n,m) in range [0,1]
 # n - number of sumples
@@ -103,7 +126,7 @@ def model_func(x, scales, inf_model, mq):
     loss = x.new_empty(x.shape[0])
     for i in tqdm(range(x.shape[0])):
         # set clip value. rescale to [0.5,1] to avoid radical saturation
-        r = (x[i] + 1) / 2
+        r = (x[i] + 0.5) / 2
         mq.set_clipping(r*scales, inf_model.device)
 
         # evaluate with clipping
@@ -148,25 +171,34 @@ def main(args, ml_logger):
     init = mq.get_clipping()
     # print(init)
 
-    gamma_avg = 0
-    T_avg = 0
+    # gamma_avg = 0
+    # T_avg = 0
     num_iter = args.num_iter
     n = args.num_points
-    for i in range(num_iter):
-        gamma, T = separability_index(lambda x: model_func(x, init, inf_model, mq), len(init), n, gpu=True, gamma_expecation=True)
-        gamma_avg += gamma.abs()
-        T_avg += T.abs()
 
-        print("gamma^2: {}, T: {}".format(gamma.abs(), T))
-        ml_logger.log_metric('gamma_sample', gamma.abs().cpu().item(), step='auto')
-        ml_logger.log_metric('gamma_avg', gamma_avg.cpu().item() / (i + 1), step='auto')
+    def status_callback(i, gamma, T, f_max):
+        T = T.item()
+        gamma = gamma.item()
+        f_max = f_max.item()
 
-    gamma = gamma_avg.cpu().item() / num_iter
-    T = T_avg.cpu().item() / num_iter
+        print("gamma^2: {}, T: {}, max: {}".format(gamma, T, f_max))
+        ml_logger.log_metric('gamma', gamma, step='auto')
+        ml_logger.log_metric('T', T, step='auto')
+        ml_logger.log_metric('f_max', f_max, step='auto')
+        T_norm = T / np.sqrt(i+1)
+        ml_logger.log_metric('T_norm', T_norm, step='auto')
+        gamma_norm = gamma / f_max**2
+        ml_logger.log_metric('gamma_norm', gamma_norm, step='auto')
 
-    print("gamma^2: {}, T: {}".format(gamma, T))
-    ml_logger.log_metric('gamma', gamma, step='auto')
-    ml_logger.log_metric('T', T, step='auto')
+    gamma_, T_, f_max = separability_index(lambda x: model_func(x, init, inf_model, mq), len(init), n, num_iter,
+                                  gpu=True, status_callback=status_callback)
+
+    gamma_norm = np.mean(np.array(gamma_) / f_max.item()**2)
+    T_norm = np.mean(np.array(T_) / np.sqrt(np.arange(1, num_iter + 1)))
+
+    print("gamma^2 norm: {}, T norm: {}".format(gamma_norm, T_norm))
+    ml_logger.log_metric('gamma_tot', gamma_norm, step='auto')
+    ml_logger.log_metric('T_tot', T_norm, step='auto')
 
 
 if __name__ == '__main__':
