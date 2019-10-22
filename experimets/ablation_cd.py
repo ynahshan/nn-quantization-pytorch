@@ -12,9 +12,9 @@ models_set = [
     # {'model': 'resnet101', 'bs': 512, 'dev': [5]}
 ]
 
-exp_name = 'powell'
-qtypes = ['max_static']
-# qtypes = ['l2_norm', 'aciq_laplace', 'l3_norm']
+exp_name = 'coord'
+# qtypes = ['l2_norm']
+qtypes = ['max_static', 'l2_norm', 'aciq_laplace', 'l3_norm']
 
 for mset in models_set:
     for qt in qtypes:
@@ -22,7 +22,7 @@ for mset in models_set:
             run(["python", "quantization/posttraining/layer_scale_optimization.py"] + ['-a', mset['model']] + ['-b', str(mset['bs'])]
                 + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
                 + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
-                + ['-ba', str(bits)] + ['--qtype', qt] + "--min_method Powell -maxi 2 --init_method dynamic".split(" ")
+                + ['-ba', str(bits)] + ['--qtype', qt] + "--min_method CD -maxi 1 --init_method dynamic".split(" ")
                 )
 
         for bits in [3, 4]:
@@ -30,7 +30,7 @@ for mset in models_set:
                 mset['bs'])]
                 + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
                 + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
-                + ['-bw', str(bits)] + ['--qtype', qt] + "--min_method Powell -maxi 2 --init_method dynamic".split(
+                + ['-bw', str(bits)] + ['--qtype', qt] + "--min_method CD -maxi 1 --init_method dynamic".split(
                 " ")
                 )
 
@@ -39,6 +39,6 @@ for mset in models_set:
                 mset['bs'])]
                 + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
                 + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
-                + ['-ba', str(bits)] + ['-bw', str(bits)] + ['--qtype', qt] + "--min_method Powell -maxi 2 --init_method dynamic".split(
+                + ['-ba', str(bits)] + ['-bw', str(bits)] + ['--qtype', qt] + "--min_method CD -maxi 1 --init_method dynamic".split(
                 " ")
                 )

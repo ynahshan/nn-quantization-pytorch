@@ -100,9 +100,30 @@ def run_inference_on_batch(scales, model, mq):
     return loss
 
 
-def coord_descent(fun, x0, args, **kwargs):
-    # TODO: Implement coordinate descent here
+def coord_descent(fun, init, args, **kwargs):
+    maxiter = kwargs['maxiter']
+    x = init.copy()
+
+    def coord_opt(alpha, scales, i):
+        scales[i] = alpha
+        result = fun(scales)
+        return result
+
+    nfev = 0
+    for j in range(maxiter):
+        for i in range(len(x)):
+            print("Optimizing variable {}".format(i))
+            r = opt.minimize_scalar(lambda alpha: coord_opt(alpha, x, i))
+            nfev += r.nfev
+            opt_alpha = r.x
+            x[i] = opt_alpha
+
     res = opt.OptimizeResult()
+    res.x = x
+    res.nit = maxiter
+    res.nfev = nfev
+    res.success = True
+
     return res
 
 
@@ -162,6 +183,9 @@ def main(args, ml_logger):
         loss = inf_model.evaluate_calibration()
         print("Initial loss: {:.4f}".format(loss.item()))
 
+    global _min_loss
+    _min_loss = loss.item()
+
     # evaluate
     acc = inf_model.validate()
     ml_logger.log_metric('Acc init', acc, step='auto')
@@ -182,7 +206,7 @@ def main(args, ml_logger):
         print("loss: {:.4f}\n".format(loss))
 
     method = coord_descent if args.min_method == 'CD' else args.min_method
-    res = opt.minimize(lambda scales: run_inference_on_batch(scales, inf_model, mq), np.array(init),
+    res = opt.minimize(lambda scales: run_inference_on_batch(scales, inf_model, mq), init.cpu().numpy(),
                        method=method, options=min_options, callback=local_search_callback)
 
     print(res)
@@ -192,7 +216,7 @@ def main(args, ml_logger):
 
     # evaluate
     acc = inf_model.validate()
-    ml_logger.log_metric('Acc Powell', acc, step='auto')
+    ml_logger.log_metric('Acc {}'.format(args.min_method), acc, step='auto')
     # save scales
 
 
