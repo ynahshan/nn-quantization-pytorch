@@ -105,8 +105,12 @@ def coord_descent(fun, init, args, **kwargs):
     x = init.copy()
 
     def coord_opt(alpha, scales, i):
-        scales[i] = alpha
-        result = fun(scales)
+        if alpha < 0:
+            result = 1e6
+        else:
+            scales[i] = alpha
+            result = fun(scales)
+
         return result
 
     nfev = 0
@@ -187,8 +191,8 @@ def main(args, ml_logger):
     _min_loss = loss.item()
 
     # evaluate
-    acc = inf_model.validate()
-    ml_logger.log_metric('Acc init', acc, step='auto')
+    # acc = inf_model.validate()
+    # ml_logger.log_metric('Acc init', acc, step='auto')
 
     # run optimizer
     min_options = {}

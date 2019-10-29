@@ -122,12 +122,18 @@ def separability_index(f, m, n, k=1, gpu=False, status_callback=None):
 # assum x is matrix (n,m) in range [0,1]
 # n - number of sumples
 # m - number of variables
-def model_func(x, scales, inf_model, mq):
+def model_func(x, scales, inf_model, mq, a, b):
     loss = x.new_empty(x.shape[0])
     for i in tqdm(range(x.shape[0])):
-        # set clip value. rescale to [0.5,1] to avoid radical saturation
-        r = (x[i] + 0.5) / 2
-        mq.set_clipping(r*scales, inf_model.device)
+        # in general do transformation X: [0, 1] => [a, b] where [a, b] is region of interest
+        # e.g. region around point that minimizes some metric
+        # We can do simple linear transformation (x + alpha) / beta where
+        alpha = a / (b - a)
+        beta = 1 / (b - a)
+        r = (x[i] + alpha) / beta
+        r = torch.min(r, scales)
+        r = torch.max(r, r.new_zeros(1))
+        mq.set_clipping(r, inf_model.device)
 
         # evaluate with clipping
         loss[i] = inf_model.evaluate_calibration()
@@ -144,6 +150,7 @@ def main(args, ml_logger):
     cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+    args.qtype = 'max_static'
     # create model
     # Always enable shuffling to avoid issues where we get bad results due to weak statistics
     inf_model = CnnModel(args.arch, args.custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
@@ -168,8 +175,26 @@ def main(args, ml_logger):
     ml_logger.log_metric('loss', loss.item(), step='auto')
 
     # get clipping values
-    init = mq.get_clipping()
+    p_max = mq.get_clipping()
     # print(init)
+
+    args.qtype = 'l2_norm'
+    inf_model = CnnModel(args.arch, args.custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
+                         batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
+                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
+    mq = ModelQuantizer(inf_model.model, args, all_layers, replacement_factory)
+    loss = inf_model.evaluate_calibration()
+    print("loss l2: {:.4f}".format(loss.item()))
+    p_l2 = mq.get_clipping()
+
+    args.qtype = 'l3_norm'
+    inf_model = CnnModel(args.arch, args.custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
+                         batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
+                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
+    mq = ModelQuantizer(inf_model.model, args, all_layers, replacement_factory)
+    loss = inf_model.evaluate_calibration()
+    print("loss l2: {:.4f}".format(loss.item()))
+    p_l3 = mq.get_clipping()
 
     # gamma_avg = 0
     # T_avg = 0
@@ -190,7 +215,7 @@ def main(args, ml_logger):
         gamma_norm = gamma / f_max**2
         ml_logger.log_metric('gamma_norm', gamma_norm, step='auto')
 
-    gamma_, T_, f_max = separability_index(lambda x: model_func(x, init, inf_model, mq), len(init), n, num_iter,
+    gamma_, T_, f_max = separability_index(lambda x: model_func(x, p_max, inf_model, mq, p_l2, p_l3), len(p_max), n, num_iter,
                                   gpu=True, status_callback=status_callback)
 
     gamma_norm = np.mean(np.array(gamma_) / f_max.item()**2)
