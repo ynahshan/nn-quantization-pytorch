@@ -20,9 +20,9 @@ models_set = [
 
 layer_type = '-ba' if args.act_or_weights == 'a' else '-bw'
 for mset in models_set:
-    for bits in [2, 3, 4, 5, 6, 7, 8]:
+    for bits in [7, 8]:
         run(["python", "quantization/analysis/separability_index.py"] + ['-a', mset['model']] + ['-b', str(mset['bs'])]
             + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
             + "--pretrained --custom_resnet".split(" ") + ['-exp', args.experiment]
-            + [layer_type, str(bits)] + "-i 5 -n 100".split(" ")
+            + [layer_type, str(bits)] + "-i 7 -n 1000".split(" ")
             )
