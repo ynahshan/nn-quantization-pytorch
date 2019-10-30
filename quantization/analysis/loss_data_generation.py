@@ -158,7 +158,7 @@ def main(args):
     laplace_point = mq.get_clipping()
     laplace_point = np.concatenate([laplace_point.cpu().numpy(), laplace_loss.cpu().numpy()])
 
-    f_name = "{}_l0l1_W{}A{}.pkl".format(args.arch, args.bit_act, args.bit_weights)
+    f_name = "{}_l0l1_W{}A{}.pkl".format(args.arch, args.bit_weights, args.bit_act)
     f = open(os.path.join(proj_root_dir, 'data', f_name), 'wb')
     data = {'X': X, 'Y': Y, 'Z': Z,
             'max_point': max_point, 'l2_point': l2_point,
