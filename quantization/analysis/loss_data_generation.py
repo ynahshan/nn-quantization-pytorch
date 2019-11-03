@@ -123,6 +123,14 @@ def main(args):
 
     args.qtype = 'l2_norm'
     del inf_model
+    # Fix the seed
+    random.seed(args.seed)
+    if not args.dont_fix_np_seed:
+        np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     inf_model = CnnModel(args.arch, custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
                          cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
@@ -136,6 +144,14 @@ def main(args):
 
     args.qtype = 'l3_norm'
     del inf_model
+    # Fix the seed
+    random.seed(args.seed)
+    if not args.dont_fix_np_seed:
+        np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     inf_model = CnnModel(args.arch, custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
                          cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
@@ -148,6 +164,14 @@ def main(args):
 
     args.qtype = 'aciq_laplace'
     del inf_model
+    # Fix the seed
+    random.seed(args.seed)
+    if not args.dont_fix_np_seed:
+        np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     inf_model = CnnModel(args.arch, custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
                          cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
