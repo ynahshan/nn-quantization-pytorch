@@ -1,12 +1,13 @@
 import argparse
 import os
 import sys
+
+from hessian import hessian
+
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 
 import random
-import shutil
 import time
-import warnings
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -28,15 +29,15 @@ from quantization.posttraining.module_wrapper import ActivationModuleWrapperPost
 home = str(Path.home())
 
 model_names = sorted(name for name in models.__dict__
-    if name.islower() and not name.startswith("__")
-    and callable(models.__dict__[name]))
+                     if name.islower() and not name.startswith("__")
+                     and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                     choices=model_names,
                     help='model architecture: ' +
-                        ' | '.join(model_names) +
-                        ' (default: resnet18)')
+                         ' | '.join(model_names) +
+                         ' (default: resnet18)')
 parser.add_argument('--dataset', metavar='DATASET', default='imagenet',
                     help='dataset name')
 parser.add_argument('--datapath', metavar='DATAPATH', type=str, default=None,
@@ -113,7 +114,8 @@ def main_worker(args, ml_logger):
 
     # create model
     if 'resnet' in args.arch and args.custom_resnet:
-        model = custom_resnet(arch=args.arch, pretrained=args.pretrained, depth=arch2depth(args.arch), dataset=args.dataset)
+        model = custom_resnet(arch=args.arch, pretrained=args.pretrained, depth=arch2depth(args.arch),
+                              dataset=args.dataset)
     elif args.pretrained:
         print("=> using pre-trained model '{}'".format(args.arch))
         model = models.__dict__[args.arch](pretrained=True)
@@ -171,7 +173,7 @@ def main_worker(args, ml_logger):
         mq = ModelQuantizer(model, args, layers, replacement_factory)
         mq.log_quantizer_state(ml_logger, -1)
 
-    acc = validate(val_loader, model, criterion, args, device)
+    acc = validate_h(val_loader, model, criterion, args, device)
     ml_logger.log_metric('Val Acc1', acc, step='auto')
 
 
@@ -215,6 +217,52 @@ def validate(val_loader, model, criterion, args, device):
 
     return top1.avg
 
+
+def validate_h(val_loader, model, criterion, args, device):
+    batch_time = AverageMeter('Time', ':6.3f')
+    losses = AverageMeter('Loss', ':.4e')
+    top1 = AverageMeter('Acc@1', ':6.2f')
+    top5 = AverageMeter('Acc@5', ':6.2f')
+    progress = ProgressMeter(len(val_loader), batch_time, losses, top1, top5,
+                             prefix='Test: ')
+
+    # switch to evaluate mode
+    model.eval()
+
+    end = time.time()
+    for i, (images, target) in enumerate(val_loader):
+        alphas = [layer.alpha for layer in model.modules() if hasattr(layer, 'alpha')]
+        for a in alphas:
+            a.requires_grad = True
+        images = images.to(device, non_blocking=True)
+        target = target.to(device, non_blocking=True)
+
+        # compute output
+        output = model(images)
+        loss = criterion(output, target)
+        h = hessian(loss, alphas, create_graph=True)
+
+        print(h)
+
+        # measure accuracy and record loss
+        acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        losses.update(loss.item(), images.size(0))
+        top1.update(acc1.item(), images.size(0))
+        top5.update(acc5.item(), images.size(0))
+
+        # measure elapsed time
+        batch_time.update(time.time() - end)
+        end = time.time()
+
+        if i % args.print_freq == 0:
+            progress.print(i)
+
+    # TODO: this should also be done with the ProgressMeter
+    print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
+          .format(top1=top1, top5=top5))
+
+
+    return top1.avg
 
 if __name__ == '__main__':
     main()
