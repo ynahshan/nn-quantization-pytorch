@@ -63,9 +63,11 @@ parser.add_argument('--bit_weights', '-bw', type=int, help='Number of bits for w
 parser.add_argument('--bit_act', '-ba', type=int, help='Number of bits for activations', default=None)
 parser.add_argument('--pre_relu', dest='pre_relu', action='store_true', help='use pre-ReLU quantization')
 parser.add_argument('--qtype', default='max_static', help='Type of quantization method')
+parser.add_argument('-lp', type=float, help='p parameter of Lp norm', default=2.)
 parser.add_argument('--dont_fix_np_seed', '-dfns', action='store_true', help='Do not fix np seed even if seed specified')
 
 parser.add_argument('--grid_resolution', '-gr', type=int, help='Number of intervals in the grid, one coordinate.', default=11)
+
 
 def main(args):
     # Fix the seed
@@ -121,72 +123,52 @@ def main(args):
 
     max_point = np.concatenate([max_point.cpu().numpy(), loss.cpu().numpy()])
 
-    args.qtype = 'l2_norm'
-    del inf_model
-    # Fix the seed
-    random.seed(args.seed)
-    if not args.dont_fix_np_seed:
-        np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
-    cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    inf_model = CnnModel(args.arch, custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
-                         batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
+    def eval_pnorm(p):
+        args.qtype = 'lp_norm'
+        args.lp = p
+        # Fix the seed
+        random.seed(args.seed)
+        if not args.dont_fix_np_seed:
+            np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        torch.cuda.manual_seed_all(args.seed)
+        cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        inf_model = CnnModel(args.arch, custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
+                             batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
+                             cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
 
-    del mq
-    mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
-    l2_loss = inf_model.evaluate_calibration()
-    print("loss l2: {:.4f}".format(l2_loss.item()))
-    l2_point = mq.get_clipping()
-    l2_point = np.concatenate([l2_point.cpu().numpy(), l2_loss.cpu().numpy()])
+        mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
+        loss = inf_model.evaluate_calibration()
+        point = mq.get_clipping()
+        point = np.concatenate([point.cpu().numpy(), loss.cpu().numpy()])
 
-    args.qtype = 'l3_norm'
-    del inf_model
-    # Fix the seed
-    random.seed(args.seed)
-    if not args.dont_fix_np_seed:
-        np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
-    cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    inf_model = CnnModel(args.arch, custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
-                         batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
-    del mq
-    mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
-    l3_loss = inf_model.evaluate_calibration()
-    print("loss l3: {:.4f}".format(l3_loss.item()))
-    l3_point = mq.get_clipping()
-    l3_point = np.concatenate([l3_point.cpu().numpy(), l3_loss.cpu().numpy()])
+        del inf_model
+        del mq
+        return point
 
-    args.qtype = 'aciq_laplace'
     del inf_model
-    # Fix the seed
-    random.seed(args.seed)
-    if not args.dont_fix_np_seed:
-        np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
-    cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    inf_model = CnnModel(args.arch, custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
-                         batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
     del mq
-    mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
-    laplace_loss = inf_model.evaluate_calibration()
-    print("loss laplace: {:.4f}".format(laplace_loss.item()))
-    laplace_point = mq.get_clipping()
-    laplace_point = np.concatenate([laplace_point.cpu().numpy(), laplace_loss.cpu().numpy()])
+    l1_point = eval_pnorm(1.)
+    print("loss l1: {:.4f}".format(l1_point[2]))
+
+    l1_5_point = eval_pnorm(1.5)
+    print("loss l1.5: {:.4f}".format(l1_5_point[2]))
+
+    l2_point = eval_pnorm(2.)
+    print("loss l2: {:.4f}".format(l2_point[2]))
+
+    l2_5_point = eval_pnorm(2.5)
+    print("loss l2.5: {:.4f}".format(l2_5_point[2]))
+
+    l3_point = eval_pnorm(3.)
+    print("loss l3: {:.4f}".format(l3_point[2]))
 
     f_name = "{}_l0l1_W{}A{}.pkl".format(args.arch, args.bit_weights, args.bit_act)
     f = open(os.path.join(proj_root_dir, 'data', f_name), 'wb')
     data = {'X': X, 'Y': Y, 'Z': Z,
-            'max_point': max_point, 'l2_point': l2_point,
-            'l3_point': l3_point, 'laplace_point': laplace_point}
+            'max_point': max_point, 'l1_point': l1_point, 'l1.5_point': l1_5_point, 'l2_point': l2_point,
+            'l2.5_point': l2_5_point, 'l3_point': l3_point}
     pickle.dump(data, f)
     f.close()
     print("Data saved to {}".format(f_name))
