@@ -102,6 +102,23 @@ class LpNormQuantization(ClippedUniformQuantization):
         return err.item()
 
 
+class L1NormQuantization(ClippedUniformQuantization):
+    def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False, tails=False, kwargs={}):
+        super(L1NormQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic, tails)
+
+        with torch.no_grad():
+            opt_alpha = opt.minimize_scalar(lambda alpha: self.estimate_quant_error(alpha, tensor),
+                                            bounds=(tensor.min().item(), tensor.max().item())).x
+
+        self.register_buffer(self.alpha_param_name, tensor.new_tensor([opt_alpha]))
+
+    def estimate_quant_error(self, alpha, x):
+        N = x.numel() if self.symmetric else x[x != 0].numel()
+        xq = self.__quantize__(x, alpha)
+        err = torch.sum(torch.abs(xq - x)) / N
+        return err.item()
+
+
 class L2NormQuantization(ClippedUniformQuantization):
     def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False, tails=False, kwargs={}):
         super(L2NormQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic, tails)

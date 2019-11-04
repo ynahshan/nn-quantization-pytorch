@@ -107,6 +107,33 @@ class UniformQuantization(QuantizationBase):
 
         return t_q
 
+    # def __quantize_gemmlowp__(self, tensor, min_, max_):
+    #     assert self.uint is True
+    #     delta = (max_ - min_) / (self.num_bins - 1)
+    #     delta = max(delta, 1e-8)
+    #
+    #     # quantize
+    #     t_q = (tensor - min_) / delta
+    #
+    #     # stochastic rounding
+    #     if self.stochastic and self.module.training:
+    #         with torch.no_grad():
+    #             noise = t_q.new_empty(t_q.shape).uniform_(-0.5, 0.5)
+    #             t_q += noise
+    #
+    #     # clamp and round
+    #     t_q = torch.clamp(t_q, self.qmin, self.qmax)
+    #     t_q = RoundSTE.apply(t_q)
+    #     assert torch.unique(t_q).shape[0] <= self.num_bins
+    #
+    #     # uncomment to debug quantization
+    #     # print(torch.unique(t_q))
+    #
+    #     # de-quantize
+    #     t_q = t_q * delta + min_
+    #
+    #     return t_q
+
     def __for_repr__(self):
         return [('bits', self.num_bits), ('symmetric', self.symmetric), ('tails', self.tails)]
 

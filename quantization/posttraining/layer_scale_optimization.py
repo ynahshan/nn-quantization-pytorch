@@ -126,6 +126,7 @@ def coord_descent(fun, init, args, **kwargs):
     res.x = x
     res.nit = maxiter
     res.nfev = nfev
+    res.fun = np.array([r.fun])
     res.success = True
 
     return res
@@ -187,12 +188,14 @@ def main(args, ml_logger):
         loss = inf_model.evaluate_calibration()
         print("Initial loss: {:.4f}".format(loss.item()))
 
+    ml_logger.log_metric('Loss init'.format(args.min_method), loss.item(), step='auto')
+
     global _min_loss
     _min_loss = loss.item()
 
     # evaluate
-    # acc = inf_model.validate()
-    # ml_logger.log_metric('Acc init', acc, step='auto')
+    acc = inf_model.validate()
+    ml_logger.log_metric('Acc init', acc, step='auto')
 
     # run optimizer
     min_options = {}
@@ -215,6 +218,7 @@ def main(args, ml_logger):
 
     print(res)
     scales = res.x
+    ml_logger.log_metric('Loss {}'.format(args.min_method), res.fun.item(), step='auto')
 
     mq.set_clipping(scales, inf_model.device)
 

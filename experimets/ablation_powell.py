@@ -12,8 +12,8 @@ models_set = [
     # {'model': 'resnet101', 'bs': 512, 'dev': [5]}
 ]
 
-exp_name = 'powell'
-qtypes = ['max_static']
+exp_name = 'powell_resnet18'
+qtypes = ['l1_norm']
 # qtypes = ['l2_norm', 'aciq_laplace', 'l3_norm']
 
 for mset in models_set:
