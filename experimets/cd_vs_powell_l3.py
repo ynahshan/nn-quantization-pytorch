@@ -12,8 +12,8 @@ models_set = [
     # {'model': 'resnet101', 'bs': 512, 'dev': [5]}
 ]
 
-exp_name = 'coord_vs_powell_l2'
-qtypes = ['l2_norm']
+exp_name = 'coord_vs_powell_l3'
+qtypes = ['l3_norm']
 # qtypes = ['l2_norm', 'l3_norm', 'max_static']
 
 for mset in models_set:

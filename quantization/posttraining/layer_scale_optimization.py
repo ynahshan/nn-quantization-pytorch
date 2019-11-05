@@ -78,15 +78,11 @@ _eval_count = count(0)
 _min_loss = 1e6
 
 
-def run_inference_on_batch(scales, model, mq):
+def evaluate_calibration_clipped(scales, model, mq):
     global _eval_count, _min_loss
     eval_count = next(_eval_count)
 
-    qwrappers = mq.get_qwrappers()
-    for i, qwrapper in enumerate(qwrappers):
-        if i < len(scales):
-            qwrapper.set_quantization(FixedClipValueQuantization, {'clip_value': scales[i], 'device': model.device},
-                                      verbose=(eval_count % 300 == 0))
+    mq.set_clipping(scales, model.device)
     loss = model.evaluate_calibration().item()
 
     if loss < _min_loss:
@@ -121,6 +117,9 @@ def coord_descent(fun, init, args, **kwargs):
             nfev += r.nfev
             opt_alpha = r.x
             x[i] = opt_alpha
+
+        if 'callback' in kwargs:
+            kwargs['callback'](x)
 
     res = opt.OptimizeResult()
     res.x = x
@@ -208,19 +207,27 @@ def main(args, ml_logger):
 
     def local_search_callback(x):
         it = next(_iter)
-        loss = run_inference_on_batch(x, inf_model, mq)
+        mq.set_clipping(x, inf_model.device)
+        loss = inf_model.evaluate_calibration()
         print("\n[{}]: Local search callback".format(it))
-        print("loss: {:.4f}\n".format(loss))
+        print("loss: {:.4f}\n".format(loss.item()))
+        print(x)
+        ml_logger.log_metric('Loss {}'.format(args.min_method), loss.item(), step='auto')
+
+        # evaluate
+        acc = inf_model.validate()
+        ml_logger.log_metric('Acc {}'.format(args.min_method), acc, step='auto')
 
     method = coord_descent if args.min_method == 'CD' else args.min_method
-    res = opt.minimize(lambda scales: run_inference_on_batch(scales, inf_model, mq), init.cpu().numpy(),
+    res = opt.minimize(lambda scales: evaluate_calibration_clipped(scales, inf_model, mq), init.cpu().numpy(),
                        method=method, options=min_options, callback=local_search_callback)
 
     print(res)
-    scales = res.x
-    ml_logger.log_metric('Loss {}'.format(args.min_method), res.fun.item(), step='auto')
 
+    scales = res.x
     mq.set_clipping(scales, inf_model.device)
+    loss = inf_model.evaluate_calibration()
+    ml_logger.log_metric('Loss {}'.format(args.min_method), loss.item(), step='auto')
 
     # evaluate
     acc = inf_model.validate()
