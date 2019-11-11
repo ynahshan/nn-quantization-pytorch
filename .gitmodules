@@ -1,0 +1,3 @@
+[submodule "ssd"]
+	path = ssd
+	url = https://github.com/lufficc/SSD.git

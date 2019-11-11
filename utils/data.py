@@ -46,3 +46,5 @@ def get_dataset(name, split='train', transform=None,
         return datasets.ImageFolder(root=root,
                                     transform=transform,
                                     target_transform=target_transform)
+    elif name == 'pascal':
+        pass
