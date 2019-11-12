@@ -12,55 +12,31 @@ models_set = [
     # {'model': 'resnet101', 'bs': 512, 'dev': [5]}
 ]
 
-exp_name = 'coord_vs_powell_l2'
-qtypes = ['l2_norm']
-# qtypes = ['l2_norm', 'l3_norm', 'max_static']
+exp_name = 'cd_vs_powell_res18'
 
 for mset in models_set:
-    for qt in qtypes:
-        for bits in [2, 3, 4]:
-            run(["python", "quantization/posttraining/layer_scale_optimization.py"] + ['-a', mset['model']] + ['-b', str(mset['bs'])]
-                + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
-                + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
-                + ['-ba', str(bits)] + ['--qtype', qt] + "--min_method CD -maxi 2 --init_method dynamic -cs 512".split(" ")
-                )
+    for bits in [2, 3, 4]:
+        run(["python", "quantization/posttraining/layer_scale_optimization_opt.py"] + ['-a', mset['model']] + ['-b', str(mset['bs'])]
+            + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
+            + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
+            + ['-ba', str(bits)] + "--min_method Powell -maxi 2 -cs 512".split(" ")
+            )
 
-            # run(["python", "quantization/posttraining/layer_scale_optimization.py"] + ['-a', mset['model']] + ['-b', str(mset['bs'])]
-            #     + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
-            #     + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
-            #     + ['-ba', str(bits)] + ['--qtype', qt] + "--min_method Powell -maxi 2 --init_method dynamic -cs 512".split(" ")
-            #     )
 
-        for bits in [3, 4]:
-            run(["python", "quantization/posttraining/layer_scale_optimization.py"] + ['-a', mset['model']] + ['-b', str(
-                mset['bs'])]
-                + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
-                + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
-                + ['-bw', str(bits)] + ['--qtype', qt] + "--min_method CD -maxi 2 --init_method dynamic -cs 512".split(
-                " ")
-                )
+    for bits in [3, 4]:
+        run(["python", "quantization/posttraining/layer_scale_optimization_opt.py"] + ['-a', mset['model']] + ['-b', str(
+            mset['bs'])]
+            + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
+            + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
+            + ['-bw', str(bits)] + "--min_method Powell -maxi 2 -cs 512".split(
+            " ")
+            )
 
-            # run(["python", "quantization/posttraining/layer_scale_optimization.py"] + ['-a', mset['model']] + ['-b', str(
-            #     mset['bs'])]
-            #     + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
-            #     + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
-            #     + ['-bw', str(bits)] + ['--qtype', qt] + "--min_method Powell -maxi 2 --init_method dynamic -cs 512".split(
-            #     " ")
-            #     )
-
-        for bits in [4]:
-            run(["python", "quantization/posttraining/layer_scale_optimization.py"] + ['-a', mset['model']] + ['-b', str(
-                mset['bs'])]
-                + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
-                + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
-                + ['-ba', str(bits)] + ['-bw', str(bits)] + ['--qtype', qt] + "--min_method CD -maxi 2 --init_method dynamic -cs 512".split(
-                " ")
-                )
-
-            run(["python", "quantization/posttraining/layer_scale_optimization.py"] + ['-a', mset['model']] + ['-b', str(
-                mset['bs'])]
-                + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
-                + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
-                + ['-ba', str(bits)] + ['-bw', str(bits)] + ['--qtype', qt] + "--min_method Powell -maxi 2 --init_method dynamic -cs 512".split(
-                " ")
-                )
+    for bits in [4]:
+        run(["python", "quantization/posttraining/layer_scale_optimization_opt.py"] + ['-a', mset['model']] + ['-b', str(
+            mset['bs'])]
+            + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
+            + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
+            + ['-ba', str(bits)] + ['-bw', str(bits)] + "--min_method Powell -maxi 2 -cs 512".split(
+            " ")
+            )
