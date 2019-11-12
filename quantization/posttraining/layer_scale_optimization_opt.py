@@ -71,6 +71,7 @@ parser.add_argument('--init_method', default='static',
 parser.add_argument('-siv', type=float, help='Value for static initialization', default=1.)
 
 parser.add_argument('--dont_fix_np_seed', '-dfns', action='store_true', help='Do not fix np seed even if seed specified')
+parser.add_argument('--bcorr_w', '-bcw', action='store_true', help='Bias correction for weights', default=False)
 
 
 # TODO: refactor this
