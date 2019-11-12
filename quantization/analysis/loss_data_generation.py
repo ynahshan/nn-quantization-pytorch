@@ -95,7 +95,9 @@ def main(args):
     if args.bit_act is not None and 'mobilenet' in args.arch:
         all_layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.ReLU6)][1:-1]
 
-    layers = [all_layers[0], all_layers[1]]
+    id1 = 0
+    id2 = 1
+    layers = [all_layers[id1], all_layers[id2]]
     replacement_factory = {nn.ReLU: ActivationModuleWrapperPost,
                            nn.ReLU6: ActivationModuleWrapperPost,
                            nn.Conv2d: ParameterModuleWrapperPost}
@@ -164,7 +166,7 @@ def main(args):
     l3_point = eval_pnorm(3.)
     print("loss l3: {:.4f}".format(l3_point[2]))
 
-    f_name = "{}_l0l1_W{}A{}.pkl".format(args.arch, args.bit_weights, args.bit_act)
+    f_name = "{}_l{}l{}_W{}A{}.pkl".format(args.arch, id1, id2, args.bit_weights, args.bit_act)
     f = open(os.path.join(proj_root_dir, 'data', f_name), 'wb')
     data = {'X': X, 'Y': Y, 'Z': Z,
             'max_point': max_point, 'l1_point': l1_point, 'l1.5_point': l1_5_point, 'l2_point': l2_point,
