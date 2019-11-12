@@ -245,8 +245,9 @@ def validate_h(val_loader, model, criterion, args, device):
         print(h)
         try:
             g = gradient(loss, alphas, create_graph=True)
-            gauss_curv = torch.det(h) / (torch.norm(g,p=2)**2 + 1)**2
-            print(gauss_curv.item())
+            det_h = torch.det(h)
+            gauss_curv = det_h / (torch.norm(g,p=2)**2 + 1)**2
+            print("Curvature assuming minimum: {}, general: {}".format(det_h.item(), gauss_curv.item()))
         except:
             pass
 
