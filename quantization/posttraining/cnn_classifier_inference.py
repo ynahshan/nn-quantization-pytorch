@@ -2,7 +2,7 @@ import argparse
 import os
 import sys
 
-from hessian import hessian
+from hessian import hessian, gradient
 
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 
@@ -240,9 +240,16 @@ def validate_h(val_loader, model, criterion, args, device):
         # compute output
         output = model(images)
         loss = criterion(output, target)
-        h = hessian(loss, alphas, create_graph=True)
 
+        h = hessian(loss, alphas, create_graph=True)
         print(h)
+        try:
+            g = gradient(loss, alphas, create_graph=True)
+            gauss_curv = torch.det(h) / (torch.norm(g,p=2)**2 + 1)**2
+            print(gauss_curv.item())
+        except:
+            pass
+
 
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
