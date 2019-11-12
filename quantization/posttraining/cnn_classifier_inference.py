@@ -25,6 +25,7 @@ from utils.mllog import MLlogger
 from utils.meters import AverageMeter, ProgressMeter, accuracy
 from models.resnet import resnet as custom_resnet
 from quantization.posttraining.module_wrapper import ActivationModuleWrapperPost, ParameterModuleWrapperPost
+from tqdm import tqdm
 
 home = str(Path.home())
 
@@ -166,7 +167,8 @@ def main_worker(args, ml_logger):
         all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
         all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
         all_relu6 = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU6)]
-        layers = all_relu[1:-1] + all_relu6[1:-1] + all_convs[1:-1]
+        # layers = all_relu[1:-1] + all_relu6[1:-1] + all_convs[1:-1]
+        layers = all_relu[1:-1]
         replacement_factory = {nn.ReLU: ActivationModuleWrapperPost,
                                nn.ReLU6: ActivationModuleWrapperPost,
                                nn.Conv2d: ParameterModuleWrapperPost}
@@ -230,7 +232,10 @@ def validate_h(val_loader, model, criterion, args, device):
     model.eval()
 
     end = time.time()
-    for i, (images, target) in enumerate(val_loader):
+    H = None
+    Gcurv = 0
+    count = 0
+    for i, (images, target) in tqdm(enumerate(val_loader)):
         alphas = [layer.alpha for layer in model.modules() if hasattr(layer, 'alpha')]
         for a in alphas:
             a.requires_grad = True
@@ -242,15 +247,28 @@ def validate_h(val_loader, model, criterion, args, device):
         loss = criterion(output, target)
 
         h = hessian(loss, alphas, create_graph=True)
-        print(h)
-        try:
-            g = gradient(loss, alphas, create_graph=True)
-            det_h = torch.det(h)
-            gauss_curv = det_h / (torch.norm(g,p=2)**2 + 1)**2
-            print("Curvature assuming minimum: {}, general: {}".format(det_h.item(), gauss_curv.item()))
-        except:
-            pass
+        if h.numel() > 0:
+            if H is None:
+                H = h.detach().cpu().numpy()
+            else:
+                H = H + h.detach().cpu().numpy()
+            count += 1
 
+            try:
+                det_h = torch.det(h.detach())
+                del h
+                g = gradient(loss, alphas, create_graph=True)
+                gauss_curv = det_h / (torch.norm(g.detach(), p=2) ** 2 + 1) ** 2
+                Gcurv += gauss_curv.item()
+                del g
+            except:
+                pass
+
+        if i == 30:
+            print("\nAveraging  over {} input samples".format(args.batch_size*count))
+            print("Gaussian curvature {}".format(Gcurv / count))
+            print(torch.tensor(H / count))
+            break
 
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
