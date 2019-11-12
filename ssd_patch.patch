@@ -1,0 +1,48 @@
+diff --git a/configs/vgg_ssd300_voc0712.yaml b/configs/vgg_ssd300_voc0712.yaml
+index a5a17a4..7a80a52 100644
+--- a/configs/vgg_ssd300_voc0712.yaml
++++ b/configs/vgg_ssd300_voc0712.yaml
+@@ -5,6 +5,8 @@ INPUT:
+ DATASETS:
+   TRAIN: ("voc_2007_trainval", "voc_2012_trainval")
+   TEST: ("voc_2007_test", )
++TEST:
++  BATCH_SIZE: 25
+ SOLVER:
+   MAX_ITER: 120000
+   LR_STEPS: [80000, 100000]
+diff --git a/ssd/modeling/box_head/box_head.py b/ssd/modeling/box_head/box_head.py
+index 582a570..5e0277b 100644
+--- a/ssd/modeling/box_head/box_head.py
++++ b/ssd/modeling/box_head/box_head.py
+@@ -18,10 +18,11 @@ class SSDBoxHead(nn.Module):
+         self.loss_evaluator = MultiBoxLoss(neg_pos_ratio=cfg.MODEL.NEG_POS_RATIO)
+         self.post_processor = PostProcessor(cfg)
+         self.priors = None
++        self.get_loss = False
+ 
+     def forward(self, features, targets=None):
+         cls_logits, bbox_pred = self.predictor(features)
+-        if self.training:
++        if self.training or self.get_loss:
+             return self._forward_train(cls_logits, bbox_pred, targets)
+         else:
+             return self._forward_test(cls_logits, bbox_pred)
+diff --git a/ssd/modeling/detector/ssd_detector.py b/ssd/modeling/detector/ssd_detector.py
+index c43a4a6..8caf6af 100644
+--- a/ssd/modeling/detector/ssd_detector.py
++++ b/ssd/modeling/detector/ssd_detector.py
+@@ -10,10 +10,12 @@ class SSDDetector(nn.Module):
+         self.cfg = cfg
+         self.backbone = build_backbone(cfg)
+         self.box_head = build_box_head(cfg)
++        self.get_loss = False
+ 
+     def forward(self, images, targets=None):
++        self.box_head.get_loss = self.get_loss
+         features = self.backbone(images)
+         detections, detector_losses = self.box_head(features, targets)
+-        if self.training:
++        if self.training or self.get_loss:
+             return detector_losses
+         return detections

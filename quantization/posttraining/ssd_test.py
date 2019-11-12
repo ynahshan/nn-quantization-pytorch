@@ -142,7 +142,7 @@ def evaluation(cfg, ckpt, distributed, args):
         # acc = inf_model.validate()
 
     print(cfg)
-    cal_set = make_cal_data_loader(cfg, size=cfg.TEST.BATCH_SIZE)
+    cal_set = make_cal_data_loader(cfg, size=500)
     res = opt.minimize(lambda scales: evaluate_calibration_clipped(scales, model, mq, cal_set, device),
                        init.cpu().numpy(),
                        method='Powell', options={'maxiter': 2}, callback=local_search_callback)
