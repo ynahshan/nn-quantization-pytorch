@@ -137,6 +137,7 @@ class ParameterModuleWrapperPost(nn.Module):
         self.log_clustering = False
         self.bn = kwargs['bn'] if 'bn' in kwargs else None
         self.dynamic_weight_quantization = True
+        self.bcorr_w = kwargs['bcorr_w']
 
         setattr(self, 'weight', wrapped_module.weight)
         delattr(wrapped_module, 'weight')
@@ -169,6 +170,16 @@ class ParameterModuleWrapperPost(nn.Module):
             # Quantize weights
             if self.dynamic_weight_quantization:
                 w = self.weight_quantization(self.weight)
+
+                if self.bcorr_w:
+                    bias_q = w.view(w.shape[0], -1).mean(-1)
+                    bias_q = bias_q.view(bias_q.numel(), 1, 1, 1) if len(w.shape) == 4 else bias_q.view(bias_q.numel(), 1)
+
+                    bias_orig = self.weight.view(self.weight.shape[0], -1).mean(-1)
+                    bias_orig = bias_orig.view(bias_orig.numel(), 1, 1, 1) if len(self.weight.shape) == 4 else bias_orig.view(
+                        bias_orig.numel(), 1)
+
+                    w = w - bias_q + bias_orig
             else:
                 w = self.weight_q
 

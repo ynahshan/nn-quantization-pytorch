@@ -12,23 +12,22 @@ models_set = [
     # {'model': 'resnet101', 'bs': 512, 'dev': [5]}
 ]
 
-exp_name = 'cd_vs_powell_res50'
+exp_name = 'cd_vs_powell_res50_bcorr'
 
 for mset in models_set:
-    for bits in [2, 4]:
-        run(["python", "quantization/posttraining/layer_scale_optimization_opt.py"] + ['-a', mset['model']] + ['-b', str(mset['bs'])]
-            + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
-            + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
-            + ['-ba', str(bits)] + "--min_method Powell -maxi 1 -cs 512".split(" ")
-            )
-
+    # for bits in [2, 4]:
+    #     run(["python", "quantization/posttraining/layer_scale_optimization_opt.py"] + ['-a', mset['model']] + ['-b', str(mset['bs'])]
+    #         + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
+    #         + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
+    #         + ['-ba', str(bits)] + "--min_method Powell -maxi 1 -cs 512".split(" ")
+    #         )
 
     for bits in [4]:
         run(["python", "quantization/posttraining/layer_scale_optimization_opt.py"] + ['-a', mset['model']] + ['-b', str(
             mset['bs'])]
             + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
             + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
-            + ['-bw', str(bits)] + "--min_method Powell -maxi 1 -cs 512".split(
+            + ['-bw', str(bits)] + "--min_method Powell -maxi 1 -cs 512 -bcw".split(
             " ")
             )
 
@@ -37,6 +36,6 @@ for mset in models_set:
             mset['bs'])]
             + ['--dataset', 'imagenet'] + ['--gpu_ids'] + " ".join(map(str, mset['dev'])).split(" ")
             + "--pretrained --custom_resnet".split(" ") + ['-exp', exp_name]
-            + ['-ba', str(bits)] + ['-bw', str(bits)] + "--min_method Powell -maxi 1 -cs 512".split(
+            + ['-ba', str(bits)] + ['-bw', str(bits)] + "--min_method Powell -maxi 1 -cs 512 -bcw".split(
             " ")
             )
