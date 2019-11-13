@@ -23,6 +23,7 @@ from pathlib import Path
 from utils.mllog import MLlogger
 from utils.meters import AverageMeter, ProgressMeter, accuracy
 from models.resnet import resnet as custom_resnet
+from models.inception import inception_v3 as custom_inception
 from quantization.posttraining.module_wrapper import ActivationModuleWrapperPost, ParameterModuleWrapperPost
 
 home = str(Path.home())
@@ -57,6 +58,8 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     help='use pre-trained model')
 parser.add_argument('--custom_resnet', action='store_true', help='use custom resnet implementation')
+parser.add_argument('--custom_inception', action='store_true', help='use custom inception implementation')
+
 parser.add_argument('--seed', default=12345, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu_ids', default=[0], type=int, nargs='+',
@@ -114,6 +117,9 @@ def main_worker(args, ml_logger):
     # create model
     if 'resnet' in args.arch and args.custom_resnet:
         model = custom_resnet(arch=args.arch, pretrained=args.pretrained, depth=arch2depth(args.arch), dataset=args.dataset)
+    elif 'inception_v3' in args.arch and args.custom_inception:
+        model = custom_inception(pretrained=args.pretrained)
+
     elif args.pretrained:
         print("=> using pre-trained model '{}'".format(args.arch))
         model = models.__dict__[args.arch](pretrained=True)
