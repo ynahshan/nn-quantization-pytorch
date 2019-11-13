@@ -159,7 +159,8 @@ def main_worker(args, ml_logger):
         else:
             model = torch.nn.DataParallel(model, args.gpu_ids)
 
-    val_data = get_dataset(args.dataset, 'val', get_transform(args.dataset, augment=False), datasets_path=args.datapath)
+    val_data = get_dataset(args.dataset, 'val', get_transform(args.dataset, augment=False, scale_size = 299 if 'inception' in args.arch else None,
+                               input_size = 299 if 'inception' in args.arch else None), datasets_path=args.datapath)
     val_loader = torch.utils.data.DataLoader(
         val_data,
         batch_size=args.batch_size, shuffle=args.shuffle,
