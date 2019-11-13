@@ -15,7 +15,7 @@ from models.inception import inception_v3 as custom_inception
 
 
 class CnnModel(object):
-    def __init__(self, arch, use_custom_resnet, custom_inception, pretrained, dataset, gpu_ids, datapath, batch_size, shuffle, workers,
+    def __init__(self, arch, use_custom_resnet, use_custom_inception, pretrained, dataset, gpu_ids, datapath, batch_size, shuffle, workers,
                  print_freq, cal_batch_size, cal_set_size):
         self.arch = arch
         self.use_custom_resnet = use_custom_resnet
@@ -34,7 +34,7 @@ class CnnModel(object):
         if 'resnet' in arch and use_custom_resnet:
             model = custom_resnet(arch=arch, pretrained=pretrained, depth=self.__arch2depth__(arch),
                                   dataset=dataset)
-        elif 'inception_v3' in arch and custom_inception:
+        elif 'inception_v3' in arch and use_custom_inception:
             model = custom_inception(pretrained=pretrained)
 
         elif pretrained:
@@ -61,8 +61,8 @@ class CnnModel(object):
         # define loss function (criterion) and optimizer
         self.criterion = torch.nn.CrossEntropyLoss().to(self.device)
 
-        val_data = get_dataset(dataset, 'val', get_transform(dataset, augment=False, scale_size = 299 if 'inception' in arch else None,
-                               input_size = 299 if 'inception' in arch else None),
+        val_data = get_dataset(dataset, 'val', get_transform(dataset, augment=False, scale_size=299 if 'inception' in arch else None,
+                               input_size=299 if 'inception' in arch else None),
                                datasets_path=datapath)
         self.val_loader = torch.utils.data.DataLoader(
             val_data,

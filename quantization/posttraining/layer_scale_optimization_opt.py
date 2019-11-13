@@ -49,6 +49,7 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     help='use pre-trained model')
 parser.add_argument('--custom_resnet', action='store_true', help='use custom resnet implementation')
+parser.add_argument('--custom_inception', action='store_true', help='use custom inception implementation')
 parser.add_argument('--seed', default=0, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu_ids', default=[0], type=int, nargs='+',
@@ -146,7 +147,8 @@ def main(args, ml_logger):
     # create model
     # Always enable shuffling to avoid issues where we get bad results due to weak statistics
     custom_resnet = True
-    inf_model = CnnModel(args.arch, custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
+    custom_inception = True
+    inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
                          cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
 
@@ -180,7 +182,7 @@ def main(args, ml_logger):
         torch.cuda.manual_seed_all(args.seed)
         cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-        inf_model = CnnModel(args.arch, custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
+        inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                              batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
                              cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
 
@@ -232,7 +234,7 @@ def main(args, ml_logger):
     torch.cuda.manual_seed_all(args.seed)
     cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    inf_model = CnnModel(args.arch, custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
+    inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
                          cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
 

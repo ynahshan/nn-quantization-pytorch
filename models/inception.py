@@ -43,7 +43,7 @@ def inception_v3(pretrained=False, progress=True, **kwargs):
         model = Inception3(**kwargs)
         state_dict = load_state_dict_from_url(model_urls['inception_v3_google'],
                                               progress=progress)
-        model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict, False)
         if not original_aux_logits:
             model.aux_logits = False
             del model.AuxLogits
@@ -55,7 +55,7 @@ def inception_v3(pretrained=False, progress=True, **kwargs):
 
 class Inception3(nn.Module):
 
-    def __init__(self, num_classes=1000, aux_logits=True, transform_input=False):
+    def __init__(self, num_classes=1000, aux_logits=False, transform_input=False):
         super(Inception3, self).__init__()
         self.aux_logits = aux_logits
         self.transform_input = transform_input
