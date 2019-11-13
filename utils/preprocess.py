@@ -21,8 +21,8 @@ def scale_crop(input_size, scale_size=None, normalize=__imagenet_stats):
         transforms.ToTensor(),
         transforms.Normalize(**normalize),
     ]
-    if scale_size != input_size:
-        t_list = [transforms.Resize(scale_size)] + t_list
+    # if scale_size != input_size:
+    t_list = [transforms.Resize(scale_size)] + t_list
 
     return transforms.Compose(t_list)
 

@@ -61,7 +61,8 @@ class CnnModel(object):
         # define loss function (criterion) and optimizer
         self.criterion = torch.nn.CrossEntropyLoss().to(self.device)
 
-        val_data = get_dataset(dataset, 'val', get_transform(dataset, augment=False),
+        val_data = get_dataset(dataset, 'val', get_transform(dataset, augment=False, scale_size = 299 if 'inception' in arch else None,
+                               input_size = 299 if 'inception' in arch else None),
                                datasets_path=datapath)
         self.val_loader = torch.utils.data.DataLoader(
             val_data,
