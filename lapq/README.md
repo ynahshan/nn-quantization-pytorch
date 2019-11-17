@@ -23,7 +23,7 @@ NVIDIA GPU / cuda support
 ## Prepare environment
 - Clone source code
 ```
-git clone https://github.com/submission2019/cnn-quantization.git
+git clone https://github.com/ynahshan/nn-quantization-pytorch.git
 cd cnn-quantization
 ```
 - Create virtual environment for python3 and activate:
