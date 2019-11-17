@@ -9,6 +9,7 @@
 - [scikit-learn](https://scikit-learn.org) for kmeans clustering
 - [mlflow](https://mlflow.org/) for logging
 - [tqdm](https://tqdm.github.io/) for progress
+- [scipy](https://scipy.org/) for Powell and Brent
 
 
 ## HW requirements
@@ -32,7 +33,7 @@ virtualenv --system-site-packages -p python3 venv3
 ```
 - Install dependencies
 ```
-pip install torch torchvision bokeh pandas sklearn mlflow tqdm
+pip install torch torchvision bokeh pandas sklearn mlflow tqdm scipy
 ```
 
 ### Run experiments
