@@ -1,4 +1,4 @@
-# cnn-quantization
+# Loss Aware Post-training Quantization
 
 ## Dependencies
 - python3.x
