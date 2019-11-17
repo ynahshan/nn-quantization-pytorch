@@ -1,5 +1,5 @@
 import os, sys, time, random
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 import argparse
 import torch
 import torchvision.models as models
@@ -50,6 +50,7 @@ parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     help='use pre-trained model')
 parser.add_argument('--custom_resnet', action='store_true', help='use custom resnet implementation')
 parser.add_argument('--custom_inception', action='store_true', help='use custom inception implementation')
+
 parser.add_argument('--seed', default=0, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu_ids', default=[0], type=int, nargs='+',
@@ -60,7 +61,7 @@ parser.add_argument('--experiment', '-exp', help='Name of the experiment', defau
 parser.add_argument('--bit_weights', '-bw', type=int, help='Number of bits for weights', default=None)
 parser.add_argument('--bit_act', '-ba', type=int, help='Number of bits for activations', default=None)
 parser.add_argument('--pre_relu', dest='pre_relu', action='store_true', help='use pre-ReLU quantization')
-parser.add_argument('--qtype', default='max_static', help='Type of quantization method')
+parser.add_argument('--qtype', default='aciq_laplace', help='Type of quantization method')
 parser.add_argument('-lp', type=float, help='p parameter of Lp norm', default=3.)
 
 parser.add_argument('--min_method', '-mm', help='Minimization method to use [Nelder-Mead, Powell, COBYLA]', default='Powell')
@@ -143,12 +144,9 @@ def main(args, ml_logger):
     cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    args.qtype = 'max_static'
     # create model
     # Always enable shuffling to avoid issues where we get bad results due to weak statistics
-    custom_resnet = True
-    custom_inception = True
-    inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
+    inf_model = CnnModel(args.arch, args.custom_resnet, args.custom_inception,args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
                          cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
 
@@ -164,97 +162,42 @@ def main(args, ml_logger):
     replacement_factory = {nn.ReLU: ActivationModuleWrapperPost,
                            nn.ReLU6: ActivationModuleWrapperPost,
                            nn.Conv2d: ParameterModuleWrapperPost}
-
     mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
-    loss = inf_model.evaluate_calibration()
-    print("max loss: {:.4f}".format(loss.item()))
-    max_point = mq.get_clipping()
-    ml_logger.log_metric('Loss max', loss.item(), step='auto')
+    # mq.log_quantizer_state(ml_logger, -1)
 
-    def eval_pnorm(p):
-        args.qtype = 'lp_norm'
-        args.lp = p
-        # Fix the seed
-        random.seed(args.seed)
-        if not args.dont_fix_np_seed:
-            np.random.seed(args.seed)
-        torch.manual_seed(args.seed)
-        torch.cuda.manual_seed_all(args.seed)
-        cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-        inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
-                             batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                             cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
-
-        mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
+    print("init_method: {}, qtype {}".format(args.init_method, args.qtype))
+    # initialize scales
+    if args.init_method == 'dynamic':
+        # evaluate to initialize dynamic clipping
         loss = inf_model.evaluate_calibration()
-        point = mq.get_clipping()
+        print("Initial loss: {:.4f}".format(loss.item()))
 
-        # evaluate
-        acc = inf_model.validate()
+        # get clipping values
+        init = mq.get_clipping()
+    else:
+        if args.init_method == 'static':
+            init = np.array([args.siv] * len(layers))
+        elif args.init_method == 'random':
+            init = np.random.uniform(0.5, 1., size=len(layers))  # TODO: pass range by argument
+        else:
+            raise RuntimeError("Invalid argument init_method {}".format(args.init_method))
 
-        del inf_model
-        del mq
+        # set clip value to qwrappers
+        mq.set_clipping(init, inf_model.device)
+        print("scales initialization: {}".format(str(init)))
 
-        return point, loss, acc
+        # evaluate with clipping
+        loss = inf_model.evaluate_calibration()
+        print("Initial loss: {:.4f}".format(loss.item()))
 
-    del inf_model
-    del mq
+    ml_logger.log_metric('Loss init'.format(args.min_method), loss.item(), step='auto')
 
-    l2_point, l2_loss, l2_acc = eval_pnorm(2.)
-    print("loss l2: {:.4f}".format(l2_loss.item()))
-    ml_logger.log_metric('Loss l2', l2_loss.item(), step='auto')
-    ml_logger.log_metric('Acc l2', l2_acc, step='auto')
+    global _min_loss
+    _min_loss = loss.item()
 
-    l25_point, l25_loss, l25_acc = eval_pnorm(2.5)
-    print("loss l2.5: {:.4f}".format(l25_loss.item()))
-    ml_logger.log_metric('Loss l2.5', l25_loss.item(), step='auto')
-    ml_logger.log_metric('Acc l2.5', l25_acc, step='auto')
-
-    l3_point, l3_loss, l3_acc = eval_pnorm(3.)
-    print("loss l3: {:.4f}".format(l3_loss.item()))
-    ml_logger.log_metric('Loss l3', l3_loss.item(), step='auto')
-    ml_logger.log_metric('Acc l3', l3_acc, step='auto')
-
-    # Interpolate optimal p
-    xp = np.linspace(1, 5, 50)
-    z = np.polyfit([2,2.5,3], [l2_acc, l25_acc, l3_acc], 2)
-    y = np.poly1d(z)
-    p_intr = xp[np.argmax(y(xp))]
-    print("p intr: {:.2f}".format(p_intr))
-    ml_logger.log_metric('p intr', p_intr, step='auto')
-
-    args.qtype = 'lp_norm'
-    args.lp = p_intr
-    # Fix the seed
-    random.seed(args.seed)
-    if not args.dont_fix_np_seed:
-        np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
-    cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
-                         batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
-
-    mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
-
-    # Evaluate with optimal p
-    lp_loss = inf_model.evaluate_calibration()
-    lp_point = mq.get_clipping()
     # evaluate
-    lp_acc = inf_model.validate()
-
-    print("loss p intr: {:.4f}".format(lp_loss.item()))
-    ml_logger.log_metric('Loss p intr', lp_loss.item(), step='auto')
-    ml_logger.log_metric('Acc p intr', lp_acc, step='auto')
-
-    global _eval_count, _min_loss
-    _min_loss = lp_loss.item()
-
-    idx = np.argmax([l2_acc, l25_acc, l3_acc, lp_acc])
-    init = [l2_point, l25_point, l3_point, lp_point][idx]
+    acc = inf_model.validate()
+    ml_logger.log_metric('Acc init', acc, step='auto')
 
     # run optimizer
     min_options = {}
@@ -293,29 +236,6 @@ def main(args, ml_logger):
     acc = inf_model.validate()
     ml_logger.log_metric('Acc {}'.format(args.min_method), acc, step='auto')
     # save scales
-
-    print("Starting coordinate descent")
-    args.min_method = "CD"
-    _iter = count(0)
-    global _eval_count
-    _eval_count = count(0)
-    _min_loss = lp_loss.item()
-    mq.set_clipping(init, inf_model.device)
-    # Run coordinate descent for comparison
-    method = coord_descent
-    res = opt.minimize(lambda scales: evaluate_calibration_clipped(scales, inf_model, mq), init.cpu().numpy(),
-                       method=method, options=min_options, callback=local_search_callback)
-
-    print(res)
-
-    scales = res.x
-    mq.set_clipping(scales, inf_model.device)
-    loss = inf_model.evaluate_calibration()
-    ml_logger.log_metric('Loss {}'.format("CD"), loss.item(), step='auto')
-
-    # evaluate
-    acc = inf_model.validate()
-    ml_logger.log_metric('Acc {}'.format("CD"), acc, step='auto')
 
 
 if __name__ == '__main__':
