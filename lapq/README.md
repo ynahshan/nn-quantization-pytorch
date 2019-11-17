@@ -1,0 +1,38 @@
+# cnn-quantization
+
+## Dependencies
+- python3.x
+- [pytorch](<http://www.pytorch.org>)
+- [torchvision](<https://github.com/pytorch/vision>) to load the datasets, perform image transforms
+- [pandas](<http://pandas.pydata.org/>) for logging to csv
+- [bokeh](<http://bokeh.pydata.org>) for training visualization
+- [scikit-learn](https://scikit-learn.org) for kmeans clustering
+- [mlflow](https://mlflow.org/) for logging
+- [tqdm](https://tqdm.github.io/) for progress
+
+
+## HW requirements
+NVIDIA GPU / cuda support
+
+## Data
+- To run this code you need validation set from ILSVRC2012 data
+- Configure your dataset path by providing --data "PATH_TO_ILSVRC" or copy ILSVRC dir to ~/datasets/ILSVRC2012.
+- To get the ILSVRC2012 data, you should register on their site for access: <http://www.image-net.org/>
+
+## Prepare environment
+- Clone source code
+```
+git clone https://github.com/submission2019/cnn-quantization.git
+cd cnn-quantization
+```
+- Create virtual environment for python3 and activate:
+```
+virtualenv --system-site-packages -p python3 venv3
+. ./venv3/bin/activate
+```
+- Install dependencies
+```
+pip install torch torchvision bokeh pandas sklearn mlflow tqdm
+```
+
+### Run experiments
