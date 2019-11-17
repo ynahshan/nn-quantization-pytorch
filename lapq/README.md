@@ -46,7 +46,7 @@ python lapq/layer_scale_optimization_opt.py -a resnet18 --dataset imagenet -b 25
 - To reproduce resnet50 experiment run:
 ```
 cd nn-quantization-pytorch
-python lapq/layer_scale_optimization_opt.py -a resnet50 --dataset imagenet -b 256 --pretrained --custom_resnet -ba 2 --min_method Powell -maxi 1 -exp temp -cs 512
+python lapq/layer_scale_optimization_opt.py -a resnet50 --dataset imagenet -b 128 --pretrained --custom_resnet -ba 2 --min_method Powell -maxi 1 -exp temp -cs 512
 ```
 
-To reproduce results for other models change model name after "-a" argument and batch size to 128. All other arguments are same as resnet50.
+To reproduce results for other models change model name after "-a". All other arguments are same as resnet50.
