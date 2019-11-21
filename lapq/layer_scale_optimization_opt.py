@@ -1,5 +1,6 @@
 import os, sys, time, random
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
+proj_root_dir = os.path.join(os.path.dirname(__file__), os.pardir)
+sys.path.append(proj_root_dir)
 import argparse
 import torch
 import torchvision.models as models
@@ -14,6 +15,7 @@ from quantization.posttraining.module_wrapper import ActivationModuleWrapperPost
 from quantization.methods.clipped_uniform import FixedClipValueQuantization
 from utils.mllog import MLlogger
 from quantization.posttraining.cnn_classifier import CnnModel
+import pickle
 
 
 model_names = sorted(name for name in models.__dict__
@@ -170,6 +172,7 @@ def main(args, ml_logger):
     print("max loss: {:.4f}".format(loss.item()))
     max_point = mq.get_clipping()
     ml_logger.log_metric('Loss max', loss.item(), step='auto')
+    data = {'max': {'alpha': max_point.cpu().numpy(), 'loss': loss.item()}}
 
     def eval_pnorm(p):
         args.qtype = 'lp_norm'
@@ -205,16 +208,19 @@ def main(args, ml_logger):
     print("loss l2: {:.4f}".format(l2_loss.item()))
     ml_logger.log_metric('Loss l2', l2_loss.item(), step='auto')
     ml_logger.log_metric('Acc l2', l2_acc, step='auto')
+    data['l2'] = {'alpha': l2_point.cpu().numpy(), 'loss': l2_loss.item(), 'acc': l2_acc}
 
     l25_point, l25_loss, l25_acc = eval_pnorm(2.5)
     print("loss l2.5: {:.4f}".format(l25_loss.item()))
     ml_logger.log_metric('Loss l2.5', l25_loss.item(), step='auto')
     ml_logger.log_metric('Acc l2.5', l25_acc, step='auto')
+    data['l2.5'] = {'alpha': l25_point.cpu().numpy(), 'loss': l25_loss.item(), 'acc': l25_acc}
 
     l3_point, l3_loss, l3_acc = eval_pnorm(3.)
     print("loss l3: {:.4f}".format(l3_loss.item()))
     ml_logger.log_metric('Loss l3', l3_loss.item(), step='auto')
     ml_logger.log_metric('Acc l3', l3_acc, step='auto')
+    data['l3'] = {'alpha': l3_point.cpu().numpy(), 'loss': l3_loss.item(), 'acc': l3_acc}
 
     # Interpolate optimal p
     xp = np.linspace(1, 5, 50)
@@ -278,6 +284,7 @@ def main(args, ml_logger):
         acc = inf_model.validate()
         ml_logger.log_metric('Acc {}'.format(args.min_method), acc, step='auto')
 
+    args.min_method = "Powell"
     method = coord_descent if args.min_method == 'CD' else args.min_method
     res = opt.minimize(lambda scales: evaluate_calibration_clipped(scales, inf_model, mq), init.cpu().numpy(),
                        method=method, options=min_options, callback=local_search_callback)
@@ -292,7 +299,7 @@ def main(args, ml_logger):
     # evaluate
     acc = inf_model.validate()
     ml_logger.log_metric('Acc {}'.format(args.min_method), acc, step='auto')
-    # save scales
+    data['powell'] = {'alpha': scales, 'loss': loss.item(), 'acc': acc}
 
     print("Starting coordinate descent")
     args.min_method = "CD"
@@ -316,6 +323,14 @@ def main(args, ml_logger):
     # evaluate
     acc = inf_model.validate()
     ml_logger.log_metric('Acc {}'.format("CD"), acc, step='auto')
+    data['cd'] = {'alpha': scales, 'loss': loss.item(), 'acc': acc}
+
+    # save scales
+    f_name = "scales_{}_W{}A{}.pkl".format(args.arch, args.bit_weights, args.bit_act)
+    f = open(os.path.join(proj_root_dir, 'data', f_name), 'wb')
+    pickle.dump(data, f)
+    f.close()
+    print("Data saved to {}".format(f_name))
 
 
 if __name__ == '__main__':
