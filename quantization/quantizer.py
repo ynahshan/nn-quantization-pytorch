@@ -59,11 +59,11 @@ class QuantizationScheduler(object):
     def step(self, model):
         if model.training:
             step = next(QuantizationScheduler._iter_counter)
-        if model.training and step > 0:
-            if step % 1001 == 0:
-                for q in self.quantizations:
-                    q.rho.data = 0.934 * q.rho
-                    q.temperature.data = q.temperature + 75
+        # if model.training and step > 0:
+        #     if step % 1001 == 0:
+        #         for q in self.quantizations:
+        #             q.rho.data = 0.934 * q.rho
+        #             q.temperature.data = q.temperature + 75
                 # print("Updated rho {}".format(self.quantizations[0].rho.item()))
 
         if self.scheduling_enabled and model.training:

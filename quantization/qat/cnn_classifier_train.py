@@ -186,7 +186,7 @@ def main_worker(args, ml_logger):
         replacement_factory = {nn.ReLU: ActivationModuleWrapper,
                                nn.ReLU6: ActivationModuleWrapper,
                                nn.Conv2d: ParameterModuleWrapper}
-        mq = ModelQuantizer(model, args, layers, replacement_factory)
+        mq = ModelQuantizer(model, args, layers, replacement_factory, quantization_scheduler)
         mq.log_quantizer_state(ml_logger, -1)
 
         if args.model_freeze:
