@@ -114,12 +114,8 @@ class ActivationModuleWrapper(nn.Module):
 
     def log_state(self, step, ml_logger):
         if self.__enabled__():
-            # TODO: make more generic
-            if hasattr(self, 'lsq_alpha'):
-                ml_logger.log_metric(self.name + '.lsq_alpha', self.alpha.item(),  step='auto')
-
-            if self.out_quantization_outer is not None:
-                for n, p in self.out_quantization_outer.named_parameters():
+            if self.out_quantization is not None:
+                for n, p in self.out_quantization.named_parameters():
                     if p.numel() == 1:
                         ml_logger.log_metric(self.name + '.' + n, p.item(),  step='auto')
                     else:
