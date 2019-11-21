@@ -23,6 +23,7 @@ from utils.mllog import MLlogger
 from utils.meters import AverageMeter, ProgressMeter, accuracy
 from torch.optim.lr_scheduler import StepLR
 from models.resnet import resnet as custom_resnet
+from quantization.qat.module_wrapper import ActivationModuleWrapper, ParameterModuleWrapper
 
 home = str(Path.home())
 
@@ -78,6 +79,8 @@ parser.add_argument('--bit_weights', '-bw', type=int, help='Number of bits for w
 parser.add_argument('--bit_act', '-ba', type=int, help='Number of bits for activations', default=None)
 parser.add_argument('--model_freeze', '-mf', action='store_true', help='Freeze model parameters', default=False)
 parser.add_argument('--temperature', '-t', type=float, help='Temperature parameter for sigmoid quantization', default=None)
+parser.add_argument('--qtype', default='None', help='Type of quantization method')
+parser.add_argument('--bcorr_w', '-bcw', action='store_true', help='Bias correction for weights', default=False)
 
 best_acc1 = 0
 
@@ -125,7 +128,6 @@ def main_worker(args, ml_logger):
     # optionally resume from a checkpoint
     if args.resume:
         if os.path.isfile(args.resume):
-            mq = ModelQuantizer(model, args)
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume, device)
             args.start_epoch = checkpoint['epoch']
@@ -160,10 +162,6 @@ def main_worker(args, ml_logger):
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().to(device)
 
-    if args.evaluate:
-        validate(val_loader, model, criterion, args, device)
-        return
-
     train_data = get_dataset(args.dataset, 'train', default_transform['train'])
     train_loader = torch.utils.data.DataLoader(
         train_data,
@@ -181,10 +179,22 @@ def main_worker(args, ml_logger):
     mq = None
     if args.quantize:
         quantization_scheduler = QuantizationScheduler(model, optimizer, grad_rate=101, enable=False)
-        mq = ModelQuantizer(model, args, quantization_scheduler)
+        all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
+        all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
+        all_relu6 = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU6)]
+        layers = all_relu[1:-1] + all_relu6[1:-1] + all_convs[1:-1]
+        replacement_factory = {nn.ReLU: ActivationModuleWrapper,
+                               nn.ReLU6: ActivationModuleWrapper,
+                               nn.Conv2d: ParameterModuleWrapper}
+        mq = ModelQuantizer(model, args, layers, replacement_factory)
+        mq.log_quantizer_state(ml_logger, -1)
 
-    if args.quantize and args.model_freeze:
-        mq.freeze()
+        if args.model_freeze:
+            mq.freeze()
+
+    if args.evaluate:
+        validate(val_loader, model, criterion, args, device)
+        return
 
     # evaluate on validation set
     # acc1 = validate(val_loader, model, criterion, args, device)
@@ -200,8 +210,6 @@ def main_worker(args, ml_logger):
         #     acc1_nq = validate(val_loader, model, criterion, args, device)
         #     ml_logger.log_metric('Val Acc1 fp32', acc1_nq, -1)
 
-    if args.quantize:
-        mq.log_quantizer_state(ml_logger, -1)
 
     for epoch in range(0, args.epochs):
         # train for one epoch
@@ -211,19 +219,19 @@ def main_worker(args, ml_logger):
             lr_scheduler.step()
 
         # evaluate on validation set
-        with mq.quantization_method('hard'):
-            acc1 = validate(val_loader, model, criterion, args, device)
-            ml_logger.log_metric('Val Acc1', acc1,  step='auto')
+        # with mq.quantization_method('hard'):
+        acc1 = validate(val_loader, model, criterion, args, device)
+        ml_logger.log_metric('Val Acc1', acc1,  step='auto')
 
         # evaluate with k-means quantization
-        if args.model_freeze:
+        # if args.model_freeze:
             # with mq.quantization_method('kmeans'):
             #     acc1_kmeans = validate(val_loader, model, criterion, args, device)
             #     ml_logger.log_metric('Val Acc1 kmeans', acc1_kmeans, epoch)
 
-            with mq.disable():
-                acc1_nq = validate(val_loader, model, criterion, args, device)
-                ml_logger.log_metric('Val Acc1 fp32', acc1_nq,  step='auto')
+            # with mq.disable():
+            #     acc1_nq = validate(val_loader, model, criterion, args, device)
+            #     ml_logger.log_metric('Val Acc1 fp32', acc1_nq,  step='auto')
 
         if args.quantize:
             mq.log_quantizer_state(ml_logger, epoch)
@@ -285,32 +293,32 @@ def train(train_loader, model, criterion, optimizer, epoch, args, device, ml_log
             ml_logger.log_metric('Train Acc1', top1.avg,  step='auto', log_to_tfboard=False)
             ml_logger.log_metric('Train Loss', losses.avg,  step='auto', log_to_tfboard=False)
 
-        if i > 0 and i % 500 == 0:
-            if args.quantize and mq is not None:
-                mq.log_quantizer_state(ml_logger, step='auto')
-            # evaluate on validation set
-            if i == 200 or i % 1000 == 0:
-                acc1 = validate(val_loader, model, criterion, args, device)
-                ml_logger.log_metric('Val Acc1', acc1, step='auto')
-
-                with mq.quantization_mode('hard'):
-                    acc1 = validate(val_loader, model, criterion, args, device)
-                    ml_logger.log_metric('Val Acc1 hard', acc1, step='auto')
-
-                # remember best acc@1 and save checkpoint
-                is_best = acc1 > best_acc1
-                best_acc1 = max(acc1, best_acc1)
-                print("Saving checkpoint...")
-                save_checkpoint({
-                    'epoch': i,
-                    'arch': args.arch,
-                    'state_dict': model.state_dict() if len(args.gpu_ids) == 1 else model.module.state_dict(),
-                    'best_acc1': best_acc1,
-                    'optimizer': optimizer.state_dict(),
-                }, is_best)
-
-            # switch to train mode
-            model.train()
+        # if i > 0 and i % 500 == 0:
+        #     if args.quantize and mq is not None:
+        #         mq.log_quantizer_state(ml_logger, step='auto')
+        #     # evaluate on validation set
+        #     if i == 200 or i % 1000 == 0:
+        #         acc1 = validate(val_loader, model, criterion, args, device)
+        #         ml_logger.log_metric('Val Acc1', acc1, step='auto')
+        #
+        #         with mq.quantization_mode('hard'):
+        #             acc1 = validate(val_loader, model, criterion, args, device)
+        #             ml_logger.log_metric('Val Acc1 hard', acc1, step='auto')
+        #
+        #         # remember best acc@1 and save checkpoint
+        #         is_best = acc1 > best_acc1
+        #         best_acc1 = max(acc1, best_acc1)
+        #         print("Saving checkpoint...")
+        #         save_checkpoint({
+        #             'epoch': i,
+        #             'arch': args.arch,
+        #             'state_dict': model.state_dict() if len(args.gpu_ids) == 1 else model.module.state_dict(),
+        #             'best_acc1': best_acc1,
+        #             'optimizer': optimizer.state_dict(),
+        #         }, is_best)
+        #
+        #     # switch to train mode
+        #     model.train()
 
 
 def validate(val_loader, model, criterion, args, device):
