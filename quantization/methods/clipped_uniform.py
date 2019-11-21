@@ -34,10 +34,10 @@ class LearnedStepSizeQuantization(ClippedUniformQuantization):
     def __create_optim_params__(self):
         # TODO: create default configuration
         self.__add_optim_params__('SGD', 'imagenet', [
-            (self.c_param_name, {'params': [self.c], 'lr': 1e-3, 'momentum': 0, 'weight_decay': 0})
+            (self.alpha_param_name, {'params': [getattr(self, self.alpha_param_name)], 'lr': 1e-3, 'momentum': 0, 'weight_decay': 0})
         ])
         self.__add_optim_params__('SGD', 'cifar10', [
-            (self.c_param_name, {'params': [self.c], 'lr': 1e-3, 'momentum': 0, 'weight_decay': 0})
+            (self.alpha_param_name, {'params': [getattr(self, self.alpha_param_name)], 'lr': 1e-3, 'momentum': 0, 'weight_decay': 0})
         ])
 
     @staticmethod

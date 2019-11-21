@@ -2,7 +2,7 @@ import os
 import torch.nn as nn
 import torch
 from quantization.methods.uniform import UniformQuantization
-from quantization.methods.non_uniform import KmeansQuantization
+from quantization.methods.clipped_uniform import LearnedStepSizeQuantization
 from quantization.methods.non_uniform import LearnableDifferentiableQuantization, KmeansQuantization, LearnedCentroidsQuantization
 import matplotlib
 matplotlib.use('Agg')
@@ -51,6 +51,82 @@ def plot_tensor_binning(tensor, B, v, name, step, ml_logger):
     ml_logger.tf_logger.add_figure(name + '.binning', fig, step)
 
 
+def is_positive(module):
+    return isinstance(module, nn.ReLU) or isinstance(module, nn.ReLU6)
+
+
+class ActivationModuleWrapper(nn.Module):
+    def __init__(self, name, wrapped_module, quantization_scheduler, **kwargs):
+        super(ActivationModuleWrapper, self).__init__()
+        self.name = name
+        self.wrapped_module = wrapped_module
+        self.quantization_scheduler = quantization_scheduler
+        self.bits_out = kwargs['bits_out']
+        self.enabled = True
+        self.active = True
+        self.temperature = kwargs['temperature'] # TODO: pass it directly to Quantization as kwargs
+
+        if self.bits_out is not None:
+            self.out_quantization = self.out_quantization_default = None
+
+            self.out_quantization_outer = self.out_quantization_outer_default = None
+
+            def __init_out_quantization__(tensor):
+                self.out_quantization_default = LearnedStepSizeQuantization(self, tensor, self.bits_out,
+                                                                                  symmetric=(not is_positive(wrapped_module)),
+                                                                                  uint=True, kwargs=kwargs)
+                self.out_quantization = self.out_quantization_default
+
+                if self.quantization_scheduler is not None:
+                    self.quantization_scheduler.add_quantization_params(self.out_quantization.optim_parameters())
+
+                print("ActivationModuleWrapperPost - {} | {} | {}".format(self.name, str(self.out_quantization),
+                                                                          str(tensor.device)))
+
+            self.out_quantization_init_fn = __init_out_quantization__
+
+            if self.quantization_scheduler is not None:
+                self.quantization_scheduler.register_module_quantization(self)
+
+    def __enabled__(self):
+        return self.enabled and self.active and self.bits_out is not None
+
+    def forward(self, *input):
+        out = self.wrapped_module(*input)
+
+        # Quantize output
+        if self.__enabled__():
+            self.verify_initialized(self.out_quantization, out, self.out_quantization_init_fn)
+            out = self.out_quantization(out)
+
+        return out
+
+    def set_quant_method(self, method=None):
+        if self.bits_out is not None:
+            if method == 'kmeans':
+                self.out_quantization_outer = KmeansQuantization(self.bits_out, max_iter=3)
+            else:
+                self.out_quantization_outer = self.out_quantization_outer_default
+
+    def verify_initialized(self, quantization_handle, tensor, init_fn):
+        if quantization_handle is None:
+            init_fn(tensor)
+
+    def log_state(self, step, ml_logger):
+        if self.__enabled__():
+            # TODO: make more generic
+            if hasattr(self, 'lsq_alpha'):
+                ml_logger.log_metric(self.name + '.lsq_alpha', self.alpha.item(),  step='auto')
+
+            if self.out_quantization_outer is not None:
+                for n, p in self.out_quantization_outer.named_parameters():
+                    if p.numel() == 1:
+                        ml_logger.log_metric(self.name + '.' + n, p.item(),  step='auto')
+                    else:
+                        for i, e in enumerate(p):
+                            ml_logger.log_metric(self.name + '.' + n + '.' + str(i), e.item(),  step='auto')
+
+
 class ParameterModuleWrapper(nn.Module):
     def __init__(self, name, wrapped_module, quantization_scheduler, **kwargs):
         super(ParameterModuleWrapper, self).__init__()
@@ -75,19 +151,15 @@ class ParameterModuleWrapper(nn.Module):
         delattr(wrapped_module, 'bias')
 
         if self.bit_weights is not None:
-            self.weight_quantization_default = LearnedCentroidsQuantization(self,
-                                                                            self.bit_weights,
-                                                                            symmetric=True,
-                                                                            tensor=self.weight,
-                                                                            temperature=self.temperature)
+            self.weight_quantization_default = LearnedStepSizeQuantization(self, self.weight,
+                                                                           self.bit_weights, symmetric=True,
+                                                                           uint=True, kwargs=kwargs)
             self.weight_quantization = self.weight_quantization_default
             if self.quantization_scheduler is not None:
                 self.quantization_scheduler.add_quantization_params(self.weight_quantization.optim_parameters())
 
-        if self.bit_weights is not None:
-            self.inner_quantization = UniformQuantization(self, self.weight, 8, symmetric=True)
-            if self.quantization_scheduler is not None:
-                self.quantization_scheduler.add_quantization_params(self.inner_quantization.optim_parameters())
+            print("ParameterModuleWrapperPost - {} | {} | {}".format(self.name, str(self.weight_quantization),
+                                                                      str(self.weight.device)))
 
         if self.quantization_scheduler is not None:
             self.quantization_scheduler.register_module_quantization(self)
@@ -100,9 +172,8 @@ class ParameterModuleWrapper(nn.Module):
         if self.__enabled__():
             # Quantize weights
             w = self.weight_quantization(w)
-            # w = self.inner_quantization(w) # TODO: meanwhile disable 8 bit quantization
 
-        out = self.forward_functor(*input, weight=w, bias=self.bias)
+        out = self.forward_functor(*input, weight=w, bias=(self.bias if hasattr(self, 'bias') else None))
 
         return out
 
@@ -162,83 +233,3 @@ class ParameterModuleWrapper(nn.Module):
                 weight_kmeans = KmeansQuantization(self.bit_weights)(self.weight.flatten())
                 mse_kmeans = torch.nn.MSELoss()(self.weight.flatten(), weight_kmeans)
                 ml_logger.log_metric(self.name + '.mse_kmeans', mse_kmeans.cpu().item(),  step='auto')
-
-
-class ActivationModuleWrapper(nn.Module):
-    def __init__(self, name, wrapped_module, quantization_scheduler, **kwargs):
-        super(ActivationModuleWrapper, self).__init__()
-        self.name = name
-        self.wrapped_module = wrapped_module
-        self.quantization_scheduler = quantization_scheduler
-        self.bits_out_outer = kwargs['bits_out']
-        self.bits_out_inner = 4
-        self.enabled = True
-        self.active = True
-        self.temperature = kwargs['temperature'] # TODO: pass it directly to Quantization as kwargs
-
-        if self.bits_out_outer is not None:
-            # self.out_quantization_inner_default = LearnedStepQuantization(self, self.bits_out_inner, symmetric=False)
-            # self.out_quantization_inner = self.out_quantization_inner_default
-
-            self.out_quantization_outer = self.out_quantization_outer_default = None
-
-            def __init_out_quantization_outer__(tensor):
-                self.out_quantization_outer_default = LearnedCentroidsQuantization(self,
-                                                                                   self.bits_out_outer,
-                                                                                   symmetric=False,
-                                                                                   tensor=tensor,
-                                                                                   temperature=self.temperature)
-                self.out_quantization_outer = self.out_quantization_outer_default
-
-                self.quantization_scheduler.add_quantization_params(self.out_quantization_outer.optim_parameters())
-
-            self.out_quantization_outer_init_fn = __init_out_quantization_outer__
-
-            self.quantization_scheduler.register_module_quantization(self)
-
-    def __enabled__(self):
-        return self.enabled and self.active and self.bits_out_outer is not None
-
-    def forward(self, *input):
-        out = self.wrapped_module(*input)
-
-        # Quantize output
-        if self.__enabled__():
-            # out, delta = self.out_quantization_inner.quantize(out, dequantize=False)
-
-            self.verify_initialized(self.out_quantization_outer, out, self.out_quantization_outer_init_fn)
-
-            # dequantize
-            # out = out * delta
-
-            out = self.out_quantization_outer.quantize(out)
-
-            if isinstance(self.wrapped_module, torch.nn.ReLU):
-                out = torch.nn.functional.relu(out)
-
-        return out
-
-    def set_quant_method(self, method=None):
-        if self.bits_out_outer is not None:
-            if method == 'kmeans':
-                self.out_quantization_outer = KmeansQuantization(self.bits_out_outer, max_iter=3)
-            else:
-                self.out_quantization_outer = self.out_quantization_outer_default
-
-    def verify_initialized(self, quantization_handle, tensor, init_fn):
-        if quantization_handle is None:
-            init_fn(tensor)
-
-    def log_state(self, step, ml_logger):
-        if self.__enabled__():
-            # TODO: make more generic
-            if hasattr(self, 'lsq_alpha'):
-                ml_logger.log_metric(self.name + '.lsq_alpha', self.alpha.item(),  step='auto')
-
-            if self.out_quantization_outer is not None:
-                for n, p in self.out_quantization_outer.named_parameters():
-                    if p.numel() == 1:
-                        ml_logger.log_metric(self.name + '.' + n, p.item(),  step='auto')
-                    else:
-                        for i, e in enumerate(p):
-                            ml_logger.log_metric(self.name + '.' + n + '.' + str(i), e.item(),  step='auto')

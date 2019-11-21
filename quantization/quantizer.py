@@ -88,7 +88,7 @@ class ModelQuantizer:
         self.args = args
         self.bit_weights = args.bit_weights
         self.bit_act = args.bit_act
-        self.post_relu = not args.pre_relu
+        self.post_relu = True
         self.functor_map = {nn.Conv2d: Conv2dFunctor, nn.Linear: LinearFunctor, nn.Embedding: EmbeddingFunctor}
         self.replacement_factory = replacement_factory
 
