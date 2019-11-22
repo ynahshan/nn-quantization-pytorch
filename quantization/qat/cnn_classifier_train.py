@@ -23,6 +23,7 @@ from utils.mllog import MLlogger
 from utils.meters import AverageMeter, ProgressMeter, accuracy
 from torch.optim.lr_scheduler import StepLR
 from models.resnet import resnet as custom_resnet
+from models.inception import inception_v3 as custom_inception
 from quantization.qat.module_wrapper import ActivationModuleWrapper, ParameterModuleWrapper
 
 home = str(Path.home())
@@ -65,8 +66,9 @@ parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate model on validation set')
-parser.add_argument('--pretrained', dest='pretrained', action='store_true',
-                    help='use pre-trained model')
+parser.add_argument('--pretrained', dest='pretrained', action='store_true', help='use pre-trained model')
+parser.add_argument('--custom_resnet', action='store_true', help='use custom resnet implementation')
+parser.add_argument('--custom_inception', action='store_true', help='use custom inception implementation')
 parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu_ids', default=[0], type=int, nargs='+',
@@ -83,6 +85,20 @@ parser.add_argument('--qtype', default='None', help='Type of quantization method
 parser.add_argument('--bcorr_w', '-bcw', action='store_true', help='Bias correction for weights', default=False)
 
 best_acc1 = 0
+
+
+def arch2depth(arch):
+    depth = None
+    if 'resnet18' in arch:
+        depth = 18
+    elif 'resnet34' in arch:
+        depth = 34
+    elif 'resnet50' in arch:
+        depth = 50
+    elif 'resnet101' in arch:
+        depth = 101
+
+    return depth
 
 
 def main():
@@ -109,15 +125,14 @@ def main_worker(args, ml_logger):
     if args.gpu_ids is not None:
         print("Use GPU: {} for training".format(args.gpu_ids))
 
-    # create model
-    if 'resnet' in args.arch and args.dataset == 'cifar10':
-        model = custom_resnet(depth=18, dataset=args.dataset)
-    elif args.pretrained:
-        print("=> using pre-trained model '{}'".format(args.arch))
-        model = models.__dict__[args.arch](pretrained=True)
+
+    if 'resnet' in args.arch and args.custom_resnet:
+        model = custom_resnet(arch=args.arch, pretrained=args.pretrained, depth=arch2depth(args.arch), dataset=args.dataset)
+    elif 'inception_v3' in args.arch and args.custom_inception:
+        model = custom_inception(pretrained=args.pretrained)
     else:
-        print("=> creating model '{}'".format(args.arch))
-        model = models.__dict__[args.arch]()
+        print("=> using pre-trained model '{}'".format(args.arch))
+        model = models.__dict__[args.arch](pretrained=args.pretrained)
 
     device = torch.device('cuda:{}'.format(args.gpu_ids[0]))
     cudnn.benchmark = True
@@ -182,7 +197,7 @@ def main_worker(args, ml_logger):
         all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
         all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
         all_relu6 = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU6)]
-        layers = all_relu[1:-1] + all_relu6[1:-1] + all_convs[1:-1]
+        layers = all_relu[1:] + all_relu6[1:] + all_convs[1:]
         replacement_factory = {nn.ReLU: ActivationModuleWrapper,
                                nn.ReLU6: ActivationModuleWrapper,
                                nn.Conv2d: ParameterModuleWrapper}
@@ -197,15 +212,11 @@ def main_worker(args, ml_logger):
         return
 
     # evaluate on validation set
-    # acc1 = validate(val_loader, model, criterion, args, device)
-    # ml_logger.log_metric('Val Acc1', acc1, -1)
+    acc1 = validate(val_loader, model, criterion, args, device)
+    ml_logger.log_metric('Val Acc1', acc1, -1)
 
     # evaluate with k-means quantization
     # if args.model_freeze:
-        # with mq.quantization_method('kmeans'):
-        #     acc1_kmeans = validate(val_loader, model, criterion, args, device)
-        #     ml_logger.log_metric('Val Acc1 kmeans', acc1_kmeans, -1)
-
         # with mq.disable():
         #     acc1_nq = validate(val_loader, model, criterion, args, device)
         #     ml_logger.log_metric('Val Acc1 fp32', acc1_nq, -1)
@@ -219,7 +230,6 @@ def main_worker(args, ml_logger):
             lr_scheduler.step()
 
         # evaluate on validation set
-        # with mq.quantization_method('hard'):
         acc1 = validate(val_loader, model, criterion, args, device)
         ml_logger.log_metric('Val Acc1', acc1,  step='auto')
 
@@ -292,33 +302,6 @@ def train(train_loader, model, criterion, optimizer, epoch, args, device, ml_log
             progress.print(i)
             ml_logger.log_metric('Train Acc1', top1.avg,  step='auto', log_to_tfboard=False)
             ml_logger.log_metric('Train Loss', losses.avg,  step='auto', log_to_tfboard=False)
-
-        # if i > 0 and i % 500 == 0:
-        #     if args.quantize and mq is not None:
-        #         mq.log_quantizer_state(ml_logger, step='auto')
-        #     # evaluate on validation set
-        #     if i == 200 or i % 1000 == 0:
-        #         acc1 = validate(val_loader, model, criterion, args, device)
-        #         ml_logger.log_metric('Val Acc1', acc1, step='auto')
-        #
-        #         with mq.quantization_mode('hard'):
-        #             acc1 = validate(val_loader, model, criterion, args, device)
-        #             ml_logger.log_metric('Val Acc1 hard', acc1, step='auto')
-        #
-        #         # remember best acc@1 and save checkpoint
-        #         is_best = acc1 > best_acc1
-        #         best_acc1 = max(acc1, best_acc1)
-        #         print("Saving checkpoint...")
-        #         save_checkpoint({
-        #             'epoch': i,
-        #             'arch': args.arch,
-        #             'state_dict': model.state_dict() if len(args.gpu_ids) == 1 else model.module.state_dict(),
-        #             'best_acc1': best_acc1,
-        #             'optimizer': optimizer.state_dict(),
-        #         }, is_best)
-        #
-        #     # switch to train mode
-        #     model.train()
 
 
 def validate(val_loader, model, criterion, args, device):

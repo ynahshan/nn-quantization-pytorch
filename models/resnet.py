@@ -222,7 +222,7 @@ def resnet(**kwargs):
         model = ResNet_cifar10(num_classes=num_classes,
                               block=BasicBlock, depth=depth)
 
-    if 'pretrained' in kwargs:
+    if 'pretrained' in kwargs and dataset == 'imagenet':
         arch = kwargs['arch']
         progress = kwargs['progress'] if 'progress' in kwargs else True
         state_dict = load_state_dict_from_url(model_urls[arch],
