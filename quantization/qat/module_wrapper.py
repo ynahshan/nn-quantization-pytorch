@@ -200,10 +200,6 @@ class ParameterModuleWrapper(nn.Module):
 
     def log_state(self, step, ml_logger):
         if self.__enabled__():
-            # TODO: make more generic
-            if hasattr(self, 'alpha'):
-                ml_logger.log_metric(self.name + '.alpha', self.alpha.item(),  step='auto')
-
             if self.weight_quantization is not None:
                 for n, p in self.weight_quantization.loggable_parameters():
                     if p.numel() == 1:
