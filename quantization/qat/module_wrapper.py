@@ -56,11 +56,11 @@ def is_positive(module):
 
 
 class ActivationModuleWrapper(nn.Module):
-    def __init__(self, name, wrapped_module, quantization_scheduler, **kwargs):
+    def __init__(self, name, wrapped_module, **kwargs):
         super(ActivationModuleWrapper, self).__init__()
         self.name = name
         self.wrapped_module = wrapped_module
-        self.quantization_scheduler = quantization_scheduler
+        self.optimizer_bridge = kwargs['optim_bridge']
         self.bits_out = kwargs['bits_out']
         self.enabled = True
         self.active = True
@@ -76,17 +76,12 @@ class ActivationModuleWrapper(nn.Module):
                                                                                   symmetric=(not is_positive(wrapped_module)),
                                                                                   uint=True, kwargs=kwargs)
                 self.out_quantization = self.out_quantization_default
-
-                if self.quantization_scheduler is not None:
-                    self.quantization_scheduler.add_quantization_params(self.out_quantization.optim_parameters())
+                self.optimizer_bridge.add_quantization_params(self.out_quantization.optim_parameters())
 
                 print("ActivationModuleWrapperPost - {} | {} | {}".format(self.name, str(self.out_quantization),
                                                                           str(tensor.device)))
 
             self.out_quantization_init_fn = __init_out_quantization__
-
-            if self.quantization_scheduler is not None:
-                self.quantization_scheduler.register_module_quantization(self)
 
     def __enabled__(self):
         return self.enabled and self.active and self.bits_out is not None
@@ -124,11 +119,11 @@ class ActivationModuleWrapper(nn.Module):
 
 
 class ParameterModuleWrapper(nn.Module):
-    def __init__(self, name, wrapped_module, quantization_scheduler, **kwargs):
+    def __init__(self, name, wrapped_module, **kwargs):
         super(ParameterModuleWrapper, self).__init__()
         self.name = name
         self.wrapped_module = wrapped_module
-        self.quantization_scheduler = quantization_scheduler
+        self.optimizer_bridge = kwargs['optim_bridge']
         self.forward_functor = kwargs['forward_functor']
         self.bit_weights = kwargs['bits_weight']
         self.bits_out = kwargs['bits_out']
@@ -151,14 +146,10 @@ class ParameterModuleWrapper(nn.Module):
                                                                            self.bit_weights, symmetric=True,
                                                                            uint=True, kwargs=kwargs)
             self.weight_quantization = self.weight_quantization_default
-            if self.quantization_scheduler is not None:
-                self.quantization_scheduler.add_quantization_params(self.weight_quantization.optim_parameters())
+            self.optimizer_bridge.add_quantization_params(self.weight_quantization.optim_parameters())
 
             print("ParameterModuleWrapperPost - {} | {} | {}".format(self.name, str(self.weight_quantization),
                                                                       str(self.weight.device)))
-
-        if self.quantization_scheduler is not None:
-            self.quantization_scheduler.register_module_quantization(self)
 
     def __enabled__(self):
         return self.enabled and self.active and self.bit_weights is not None

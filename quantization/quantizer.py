@@ -38,44 +38,42 @@ class EmbeddingFunctor:
         return res
 
 
-class QuantizationScheduler(object):
-    _iter_counter = count(0)
+# class QuantizationScheduler(object):
+#     _iter_counter = count(0)
+#
+#     def __init__(self, model, optimizer, grad_rate, enable=True):
+#         self.quantizations = []
+#         self.optimizer = optimizer
+#         self.grad_rate = grad_rate
+#         self.scheduling_enabled = enable
+#
+#         model.register_forward_hook(lambda m, inp, out: self.step(m))
+#
+#     def register_module_quantization(self, qwrapper):
+#         self.quantizations.append(qwrapper)
+#         if len(self.quantizations) == 1 or not self.scheduling_enabled:
+#             qwrapper.enabled = True
+#         else:
+#             qwrapper.enabled = False
+#
+#     def step(self, model):
+#         if model.training:
+#             step = next(QuantizationScheduler._iter_counter)
+#
+#         if self.scheduling_enabled and model.training:
+#             if step % self.grad_rate == 0:
+#                 i = int(step / self.grad_rate)
+#                 if i < len(self.quantizations):
+#                     self.quantizations[i].enabled = True
 
-    def __init__(self, model, optimizer, grad_rate, enable=True):
-        self.quantizations = []
+
+class OptimizerBridge(object):
+    def __init__(self, optimizer, settings={'algo': 'SGD', 'dataset': 'imagenet'}):
         self.optimizer = optimizer
-        self.grad_rate = grad_rate
-        self.scheduling_enabled = enable
-
-        model.register_forward_hook(lambda m, inp, out: self.step(m))
-
-    def register_module_quantization(self, qwrapper):
-        self.quantizations.append(qwrapper)
-        if len(self.quantizations) == 1 or not self.scheduling_enabled:
-            qwrapper.enabled = True
-        else:
-            qwrapper.enabled = False
-
-    def step(self, model):
-        if model.training:
-            step = next(QuantizationScheduler._iter_counter)
-        # if model.training and step > 0:
-        #     if step % 1001 == 0:
-        #         for q in self.quantizations:
-        #             q.rho.data = 0.934 * q.rho
-        #             q.temperature.data = q.temperature + 75
-                # print("Updated rho {}".format(self.quantizations[0].rho.item()))
-
-        if self.scheduling_enabled and model.training:
-            if step % self.grad_rate == 0:
-                i = int(step / self.grad_rate)
-                if i < len(self.quantizations):
-                    self.quantizations[i].enabled = True
+        self.settings = settings
 
     def add_quantization_params(self, all_quant_params):
-        opt = 'SGD'
-        dataset = 'imagenet'
-        key = opt + '_' + dataset
+        key = self.settings['algo'] + '_' + self.settings['dataset']
         if key in all_quant_params:
             quant_params = all_quant_params[key]
             for group in quant_params:
@@ -83,7 +81,7 @@ class QuantizationScheduler(object):
 
 
 class ModelQuantizer:
-    def __init__(self, model, args, quantizable_layers, replacement_factory, quantization_scheduler=None):
+    def __init__(self, model, args, quantizable_layers, replacement_factory, optimizer_bridge=None):
         self.model = model
         self.args = args
         self.bit_weights = args.bit_weights
@@ -92,7 +90,7 @@ class ModelQuantizer:
         self.functor_map = {nn.Conv2d: Conv2dFunctor, nn.Linear: LinearFunctor, nn.Embedding: EmbeddingFunctor}
         self.replacement_factory = replacement_factory
 
-        self.quantization_scheduler = quantization_scheduler
+        self.optimizer_bridge = optimizer_bridge
 
         self.quantization_wrappers = []
         self.quantizable_modules = []
@@ -100,7 +98,7 @@ class ModelQuantizer:
         self._pre_process_container(model)
         self._create_quantization_wrappers()
 
-        # TODO: fix freeze problem
+        # TODO: hack, make it generic
         self.quantization_params = LearnedStepSizeQuantization.learned_parameters() + \
                                    LearnedCentroidsQuantization.learned_parameters()
 
@@ -126,11 +124,11 @@ class ModelQuantizer:
             # replace module by it's wrapper
             fn = self.functor_map[type(qm.module)](qm.module) if type(qm.module) in self.functor_map else None
             args = {"bits_out": self.bit_act, "bits_weight": self.bit_weights, "forward_functor": fn,
-                    "post_relu": self.post_relu}
+                    "post_relu": self.post_relu, "optim_bridge": self.optimizer_bridge}
             args.update(vars(self.args))
             if hasattr(qm, 'bn'):
                 args['bn'] = qm.bn
-            module_wrapper = self.replacement_factory[type(qm.module)](qm.full_name, qm.module, self.quantization_scheduler,
+            module_wrapper = self.replacement_factory[type(qm.module)](qm.full_name, qm.module,
                                                                     **args)
             setattr(qm.container, qm.name, module_wrapper)
             self.quantization_wrappers.append((qm.full_name, module_wrapper))
@@ -154,11 +152,6 @@ class ModelQuantizer:
 
             prev = module
             prev_name = full_name
-
-    def quantizer_parameters(self):
-        weight_binning_params = [param for name, param in self.model.named_parameters()
-                                 if LearnableDifferentiableQuantization.binning_param_name in name]
-        return weight_binning_params
 
     def log_quantizer_state(self, ml_logger, step):
         if self.bit_weights is not None or self.bit_act is not None:
