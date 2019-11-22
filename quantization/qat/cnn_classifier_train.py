@@ -17,7 +17,7 @@ import torch.utils.data.distributed
 import torchvision.models as models
 from utils.data import get_dataset
 from utils.preprocess import get_transform
-from quantization.quantizer import ModelQuantizer, QuantizationScheduler
+from quantization.quantizer import ModelQuantizer, OptimizerBridge
 from pathlib import Path
 from utils.mllog import MLlogger
 from utils.meters import AverageMeter, ProgressMeter, accuracy
@@ -193,7 +193,6 @@ def main_worker(args, ml_logger):
 
     mq = None
     if args.quantize:
-        quantization_scheduler = QuantizationScheduler(model, optimizer, grad_rate=101, enable=False)
         all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
         all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
         all_relu6 = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU6)]
@@ -201,7 +200,8 @@ def main_worker(args, ml_logger):
         replacement_factory = {nn.ReLU: ActivationModuleWrapper,
                                nn.ReLU6: ActivationModuleWrapper,
                                nn.Conv2d: ParameterModuleWrapper}
-        mq = ModelQuantizer(model, args, layers, replacement_factory, quantization_scheduler)
+        mq = ModelQuantizer(model, args, layers, replacement_factory,
+                            OptimizerBridge(optimizer, settings={'algo': 'SGD', 'dataset': args.dataset}))
         mq.log_quantizer_state(ml_logger, -1)
 
         if args.model_freeze:
