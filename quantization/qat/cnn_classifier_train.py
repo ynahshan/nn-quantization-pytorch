@@ -15,6 +15,7 @@ import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.models as models
+import numpy as np
 from utils.data import get_dataset
 from utils.preprocess import get_transform
 from quantization.quantizer import ModelQuantizer, OptimizerBridge
@@ -40,6 +41,8 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                         ' (default: resnet18)')
 parser.add_argument('--dataset', metavar='DATASET', default='imagenet',
                     help='dataset name or folder')
+parser.add_argument('--datapath', metavar='DATAPATH', type=str, default=None,
+                    help='dataset folder')
 parser.add_argument('-j', '--workers', default=25, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('-ep', '--epochs', default=90, type=int, metavar='N',
@@ -69,7 +72,7 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 parser.add_argument('--pretrained', dest='pretrained', action='store_true', help='use pre-trained model')
 parser.add_argument('--custom_resnet', action='store_true', help='use custom resnet implementation')
 parser.add_argument('--custom_inception', action='store_true', help='use custom inception implementation')
-parser.add_argument('--seed', default=None, type=int,
+parser.add_argument('--seed', default=0, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu_ids', default=[0], type=int, nargs='+',
                     help='GPU ids to use (e.g 0 1 2 3)')
@@ -113,6 +116,14 @@ def main():
                       'which can slow down your training considerably! '
                       'You may see unexpected behavior when restarting '
                       'from checkpoints.')
+
+    if args.seed is not None:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        torch.cuda.manual_seed_all(args.seed)
+        cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
     with MLlogger(os.path.join(home, 'mxt-sim/mllog_runs'), args.experiment, args,
                   name_args=[args.arch, args.dataset, "W{}A{}".format(args.bit_weights, args.bit_act)]) as ml_logger:
@@ -196,7 +207,7 @@ def main_worker(args, ml_logger):
         all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
         all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
         all_relu6 = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU6)]
-        layers = all_relu[1:] + all_relu6[1:] + all_convs[1:]
+        layers = all_relu[1:-1] + all_relu6[1:-1] + all_convs[1:-1]
         replacement_factory = {nn.ReLU: ActivationModuleWrapper,
                                nn.ReLU6: ActivationModuleWrapper,
                                nn.Conv2d: ParameterModuleWrapper}

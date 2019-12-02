@@ -9,7 +9,7 @@ __IMAGENET_DEFAULT_PATH = '/home/cvds_lab/datasets/ILSVRC2012/'
 
 def get_dataset(name, split='train', transform=None,
                 target_transform=None, download=True,
-                datasets_path=__DATASETS_DEFAULT_PATH):
+                datasets_path=None):
     train = (split == 'train')
     root = os.path.join(datasets_path if datasets_path is not None else __DATASETS_DEFAULT_PATH, name)
     if name == 'cifar10':

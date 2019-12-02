@@ -4,6 +4,7 @@ import torch
 from quantization.methods.uniform import UniformQuantization
 from quantization.methods.clipped_uniform import LearnedStepSizeQuantization
 from quantization.methods.non_uniform import LearnableDifferentiableQuantization, KmeansQuantization, LearnedCentroidsQuantization
+from quantization.methods.stochastic import Noise
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -64,7 +65,6 @@ class ActivationModuleWrapper(nn.Module):
         self.bits_out = kwargs['bits_out']
         self.enabled = True
         self.active = True
-        self.temperature = kwargs['temperature'] # TODO: pass it directly to Quantization as kwargs
 
         if self.bits_out is not None:
             self.out_quantization = self.out_quantization_default = None
@@ -127,7 +127,6 @@ class ParameterModuleWrapper(nn.Module):
         self.forward_functor = kwargs['forward_functor']
         self.bit_weights = kwargs['bits_weight']
         self.bits_out = kwargs['bits_out']
-        self.temperature = kwargs['temperature']
         self.enabled = True
         self.active = True
         self.centroids_hist = {}
@@ -145,8 +144,10 @@ class ParameterModuleWrapper(nn.Module):
             self.weight_quantization_default = LearnedStepSizeQuantization(self, self.weight,
                                                                            self.bit_weights, symmetric=True,
                                                                            uint=True, kwargs=kwargs)
+            # self.weight_quantization_default = Noise(self, self.weight)
             self.weight_quantization = self.weight_quantization_default
-            self.optimizer_bridge.add_quantization_params(self.weight_quantization.optim_parameters())
+            if hasattr(self.weight_quantization, 'optim_parameters'):
+                self.optimizer_bridge.add_quantization_params(self.weight_quantization.optim_parameters())
 
             print("ParameterModuleWrapperPost - {} | {} | {}".format(self.name, str(self.weight_quantization),
                                                                       str(self.weight.device)))
