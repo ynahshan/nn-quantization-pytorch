@@ -99,17 +99,25 @@ class ModelQuantizer:
         self._create_quantization_wrappers()
 
         # TODO: hack, make it generic
-        self.quantization_params = LearnedStepSizeQuantization.learned_parameters() + \
-                                   LearnedCentroidsQuantization.learned_parameters()
+        self.quantization_params = LearnedStepSizeQuantization.learned_parameters()
 
     def freeze(self):
         for n, p in self.model.named_parameters():
+            # TODO: hack, make it more robust
             if not np.any([qp in n for qp in self.quantization_params]):
                 p.requires_grad = False
 
-        for n, m in self.model.named_modules():
-            if isinstance(m, nn.BatchNorm2d):
-                m.momentum = 0
+        # for n, p in self.model.named_parameters():
+        #     if not ('conv' in n or 'downsample.0' in n):
+        #         p.requires_grad = False
+
+        # for n, p in self.model.named_parameters():
+        #     if not ('bn' in n or 'downsample.1' in n):
+        #         p.requires_grad = False
+
+        # for n, m in self.model.named_modules():
+        #     if isinstance(m, nn.BatchNorm2d):
+        #         m.momentum = 0
 
     @staticmethod
     def has_children(module):
