@@ -9,6 +9,9 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
+from utils.stats_trucker import StatsTrucker as ST
+
+stat_trucker = ST()
 
 
 def plot_binning_hist(x, y, min, max):
@@ -84,6 +87,13 @@ class ActivationModuleWrapper(nn.Module):
     def load_state_dict(self, state_dict):
         if hasattr(self, 'out_quantization'):
             # TODO: fix problem that out_quantization does not exist at model loading time
+            if self.out_quantization is None:
+                t = state_dict[list(state_dict.keys())[0]].new_tensor([0.])
+                self.out_quantization_default = LearnedStepSizeQuantization(self, t, self.bits_out,
+                                                                                  symmetric=(not is_positive(self.wrapped_module)),
+                                                                                  uint=True, kwargs=None)
+                self.out_quantization = self.out_quantization_default
+
             for lp in self.out_quantization.learned_parameters():
                 pname = self.name + '.' + lp
                 if pname in state_dict:
@@ -123,6 +133,8 @@ class ActivationModuleWrapper(nn.Module):
                         for i, e in enumerate(p):
                             ml_logger.log_metric(self.name + '.' + n + '.' + str(i), e.item(),  step='auto')
 
+# from utils.meters import AverageMeter
+# conv_mean = AverageMeter('Conv_mean', ':.4f')
 
 class ParameterModuleWrapper(nn.Module):
     def __init__(self, name, wrapped_module, **kwargs):
@@ -175,7 +187,9 @@ class ParameterModuleWrapper(nn.Module):
             w = self.weight_quantization(w)
 
         out = self.forward_functor(*input, weight=w, bias=(self.bias if hasattr(self, 'bias') else None))
-
+        out_c = out.transpose(0, 1).contiguous().view(out.shape[1], -1)
+        stat_trucker.add('mean', self.name, out_c.mean(1))
+        stat_trucker.add('var', self.name, out_c.var(1))
         return out
 
     def set_quant_method(self, method=None):
