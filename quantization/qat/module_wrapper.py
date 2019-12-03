@@ -86,17 +86,15 @@ class ActivationModuleWrapper(nn.Module):
 
     def load_state_dict(self, state_dict):
         if hasattr(self, 'out_quantization'):
-            # TODO: fix problem that out_quantization does not exist at model loading time
-            if self.out_quantization is None:
-                t = state_dict[list(state_dict.keys())[0]].new_tensor([0.])
-                self.out_quantization_default = LearnedStepSizeQuantization(self, t, self.bits_out,
-                                                                                  symmetric=(not is_positive(self.wrapped_module)),
-                                                                                  uint=True, kwargs=None)
-                self.out_quantization = self.out_quantization_default
+            t = state_dict[list(state_dict.keys())[0]].new_tensor([0.])
+            q = LearnedStepSizeQuantization(self, t, self.bits_out, symmetric=(not is_positive(self.wrapped_module)),
+                                                                              uint=True, kwargs=None)
 
-            for lp in self.out_quantization.learned_parameters():
+            for lp in q.learned_parameters():
                 pname = self.name + '.' + lp
                 if pname in state_dict:
+                    if self.out_quantization is None:
+                        self.out_quantization_default = self.out_quantization = q
                     getattr(self.out_quantization, lp).data = state_dict[pname]
 
     def __enabled__(self):
@@ -187,9 +185,9 @@ class ParameterModuleWrapper(nn.Module):
             w = self.weight_quantization(w)
 
         out = self.forward_functor(*input, weight=w, bias=(self.bias if hasattr(self, 'bias') else None))
-        out_c = out.transpose(0, 1).contiguous().view(out.shape[1], -1)
-        stat_trucker.add('mean', self.name, out_c.mean(1))
-        stat_trucker.add('var', self.name, out_c.var(1))
+        # out_c = out.transpose(0, 1).contiguous().view(out.shape[1], -1)
+        # stat_trucker.add('mean', self.name, out_c.mean(1))
+        # stat_trucker.add('var', self.name, out_c.var(1))
         return out
 
     def set_quant_method(self, method=None):
