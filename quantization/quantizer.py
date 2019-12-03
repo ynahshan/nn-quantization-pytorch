@@ -101,6 +101,10 @@ class ModelQuantizer:
         # TODO: hack, make it generic
         self.quantization_params = LearnedStepSizeQuantization.learned_parameters()
 
+    def load_state_dict(self, state_dict):
+        for name, qwrapper in self.quantization_wrappers:
+            qwrapper.load_state_dict(state_dict)
+
     def freeze(self):
         for n, p in self.model.named_parameters():
             # TODO: hack, make it more robust

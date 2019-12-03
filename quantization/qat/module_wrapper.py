@@ -69,8 +69,6 @@ class ActivationModuleWrapper(nn.Module):
         if self.bits_out is not None:
             self.out_quantization = self.out_quantization_default = None
 
-            self.out_quantization_outer = self.out_quantization_outer_default = None
-
             def __init_out_quantization__(tensor):
                 self.out_quantization_default = LearnedStepSizeQuantization(self, tensor, self.bits_out,
                                                                                   symmetric=(not is_positive(wrapped_module)),
@@ -82,6 +80,14 @@ class ActivationModuleWrapper(nn.Module):
                                                                           str(tensor.device)))
 
             self.out_quantization_init_fn = __init_out_quantization__
+
+    def load_state_dict(self, state_dict):
+        if hasattr(self, 'out_quantization'):
+            # TODO: fix problem that out_quantization does not exist at model loading time
+            for lp in self.out_quantization.learned_parameters():
+                pname = self.name + '.' + lp
+                if pname in state_dict:
+                    getattr(self.out_quantization, lp).data = state_dict[pname]
 
     def __enabled__(self):
         return self.enabled and self.active and self.bits_out is not None
@@ -151,6 +157,13 @@ class ParameterModuleWrapper(nn.Module):
 
             print("ParameterModuleWrapperPost - {} | {} | {}".format(self.name, str(self.weight_quantization),
                                                                       str(self.weight.device)))
+
+    def load_state_dict(self, state_dict):
+        if hasattr(self, 'weight_quantization'):
+            for lp in self.weight_quantization.learned_parameters():
+                pname = self.name + '.' + lp
+                if pname in state_dict:
+                    getattr(self.weight_quantization, lp).data = state_dict[pname]
 
     def __enabled__(self):
         return self.enabled and self.active and self.bit_weights is not None

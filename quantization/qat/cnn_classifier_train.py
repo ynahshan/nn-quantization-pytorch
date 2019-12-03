@@ -160,7 +160,7 @@ def main_worker(args, ml_logger):
             best_acc1 = checkpoint['best_acc1']
             # best_acc1 may be from a checkpoint from a different GPU
             # best_acc1 = best_acc1.to(device)
-            model.load_state_dict(checkpoint['state_dict'])
+            model.load_state_dict(checkpoint['state_dict'], strict=False)
             # optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.resume, checkpoint['epoch']))
@@ -213,6 +213,11 @@ def main_worker(args, ml_logger):
                                nn.Conv2d: ParameterModuleWrapper}
         mq = ModelQuantizer(model, args, layers, replacement_factory,
                             OptimizerBridge(optimizer, settings={'algo': 'SGD', 'dataset': args.dataset}))
+
+        if args.resume:
+            # Load quantization parameters from state dict
+            mq.load_state_dict(checkpoint['state_dict'])
+
         mq.log_quantizer_state(ml_logger, -1)
 
         if args.model_freeze:
