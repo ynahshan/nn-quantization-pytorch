@@ -11,6 +11,10 @@ from pathlib import Path
 home = str(Path.home())
 
 
+def exit(trucker):
+    trucker.__exit__()
+
+
 class StatsTrucker(metaclass=Singleton):
     def __init__(self):
         self.folder = 'mxt-sim/stats'
@@ -18,9 +22,9 @@ class StatsTrucker(metaclass=Singleton):
         self.mode = 'mean'
         self.stats = {}
 
-        signal.signal(signal.SIGINT, self.__exit__)
-        signal.signal(signal.SIGTERM, self.__exit__)
-        atexit.register(self.__exit__)
+        signal.signal(signal.SIGINT, exit)
+        signal.signal(signal.SIGTERM, exit)
+        atexit.register(exit, self)
 
     def add(self, stat_name, id, value):
         if stat_name not in self.stats:
@@ -31,6 +35,7 @@ class StatsTrucker(metaclass=Singleton):
             self.stats[stat_name][id].append(value)
 
     def __exit__(self, *args):
+        print('ho')
         # Save measures
         location = os.path.join(home, self.folder)
         if os.path.exists(location):
