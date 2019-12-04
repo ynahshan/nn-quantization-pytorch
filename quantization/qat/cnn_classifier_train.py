@@ -157,7 +157,7 @@ def main_worker(args, ml_logger):
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume, device)
             args.start_epoch = checkpoint['epoch']
-            best_acc1 = checkpoint['best_acc1']
+            # best_acc1 = checkpoint['best_acc1']
             # best_acc1 may be from a checkpoint from a different GPU
             # best_acc1 = best_acc1.to(device)
             model.load_state_dict(checkpoint['state_dict'], strict=False)
@@ -182,7 +182,7 @@ def main_worker(args, ml_logger):
     val_data = get_dataset(args.dataset, 'val', default_transform['eval'])
     val_loader = torch.utils.data.DataLoader(
         val_data,
-        batch_size=args.batch_size, shuffle=False,
+        batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
     # define loss function (criterion) and optimizer
@@ -205,6 +205,7 @@ def main_worker(args, ml_logger):
     mq = None
     if args.quantize:
         all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
+        # all_convs = [l for l in all_convs if 'downsample' not in l]
         all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
         all_relu6 = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU6)]
         layers = all_relu[1:-1] + all_relu6[1:-1] + all_convs[1:-1]

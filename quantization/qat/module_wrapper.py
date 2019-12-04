@@ -2,13 +2,18 @@ import os
 import torch.nn as nn
 import torch
 from quantization.methods.uniform import UniformQuantization
-from quantization.methods.clipped_uniform import LearnedStepSizeQuantization
+from quantization.methods.clipped_uniform import LearnedStepSizeQuantization, MaxAbsStaticQuantization
 from quantization.methods.non_uniform import LearnableDifferentiableQuantization, KmeansQuantization, LearnedCentroidsQuantization
 from quantization.methods.stochastic import Noise
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
+
+
+quantization_mapping = {'max_static': MaxAbsStaticQuantization,
+                        'lsq': LearnedStepSizeQuantization
+                        }
 
 
 def plot_binning_hist(x, y, min, max):
@@ -63,6 +68,7 @@ class ActivationModuleWrapper(nn.Module):
         self.wrapped_module = wrapped_module
         self.optimizer_bridge = kwargs['optim_bridge']
         self.bits_out = kwargs['bits_out']
+        self.qtype = kwargs['qtype']
         self.enabled = True
         self.active = True
         self.truck_stats = False
@@ -71,7 +77,7 @@ class ActivationModuleWrapper(nn.Module):
             self.out_quantization = self.out_quantization_default = None
 
             def __init_out_quantization__(tensor):
-                self.out_quantization_default = LearnedStepSizeQuantization(self, tensor, self.bits_out,
+                self.out_quantization_default = quantization_mapping[self.qtype](self, tensor, self.bits_out,
                                                                                   symmetric=(not is_positive(wrapped_module)),
                                                                                   uint=True, kwargs=kwargs)
                 self.out_quantization = self.out_quantization_default
@@ -155,6 +161,7 @@ class ParameterModuleWrapper(nn.Module):
         self.forward_functor = kwargs['forward_functor']
         self.bit_weights = kwargs['bits_weight']
         self.bits_out = kwargs['bits_out']
+        self.qtype = kwargs['qtype']
         self.enabled = True
         self.active = True
         self.centroids_hist = {}
@@ -170,7 +177,7 @@ class ParameterModuleWrapper(nn.Module):
         delattr(wrapped_module, 'bias')
 
         if self.bit_weights is not None:
-            self.weight_quantization_default = LearnedStepSizeQuantization(self, self.weight,
+            self.weight_quantization_default = quantization_mapping[self.qtype](self, self.weight,
                                                                            self.bit_weights, symmetric=True,
                                                                            uint=True, kwargs=kwargs)
             # self.weight_quantization_default = Noise(self, self.weight)
