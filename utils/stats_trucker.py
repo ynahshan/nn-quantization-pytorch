@@ -8,6 +8,7 @@ import shutil
 from utils.misc import sorted_nicely
 import torch
 from pathlib import Path
+import pickle
 home = str(Path.home())
 
 
@@ -21,6 +22,7 @@ class StatsTrucker(metaclass=Singleton):
         self.fname = 'stats.csv'
         self.mode = 'mean'
         self.stats = {}
+        self.exited = False
 
         signal.signal(signal.SIGINT, exit)
         signal.signal(signal.SIGTERM, exit)
@@ -35,15 +37,16 @@ class StatsTrucker(metaclass=Singleton):
             self.stats[stat_name][id].append(value)
 
     def __exit__(self, *args):
-        print('ho')
+        if self.exited:
+            return
+        print("Saving stats.")
         # Save measures
         location = os.path.join(home, self.folder)
-        if os.path.exists(location):
-            shutil.rmtree(location)
+        # if os.path.exists(location):
+        #     shutil.rmtree(location)
         if not os.path.exists(location):
             os.makedirs(location)
-        path = os.path.join(location, 'stats.csv')
-        # for s in self.stats:
-        #     df = pd.DataFrame(columns=self.stats_names, data=self.stats[s_id])
-        #
-        # df.to_csv(path, index=False)
+        f = open(os.path.join(location, 'stats.pkl'), 'wb')
+        pickle.dump(self.stats, f)
+        f.close()
+        self.exited = True
