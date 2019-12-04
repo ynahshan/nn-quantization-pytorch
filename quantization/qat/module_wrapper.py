@@ -9,9 +9,6 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
-from utils.stats_trucker import StatsTrucker as ST
-
-stat_trucker = ST()
 
 
 def plot_binning_hist(x, y, min, max):
@@ -68,6 +65,7 @@ class ActivationModuleWrapper(nn.Module):
         self.bits_out = kwargs['bits_out']
         self.enabled = True
         self.active = True
+        self.truck_stats = False
 
         if self.bits_out is not None:
             self.out_quantization = self.out_quantization_default = None
@@ -108,6 +106,22 @@ class ActivationModuleWrapper(nn.Module):
             self.verify_initialized(self.out_quantization, out, self.out_quantization_init_fn)
             out = self.out_quantization(out)
 
+        if self.truck_stats:
+            from utils.stats_trucker import StatsTrucker as ST
+            st = ST()
+            x = out.transpose(0, 1).contiguous().view(out.shape[1], -1)
+            mu = x.mean(1)
+            sigma = x.std(1)
+            st.add('mean', self.name, mu)
+            st.add('var', self.name, sigma ** 2)
+            st.add('skewness', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 3, dim=1))
+            st.add('kurtosis', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 4, dim=1))
+            st.add('m5', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 5, dim=1))
+            st.add('m6', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 6, dim=1))
+            st.add('m7', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 7, dim=1))
+            st.add('m8', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 8, dim=1))
+            st.add('cv', self.name, sigma / mu)
+
         return out
 
     def set_quant_method(self, method=None):
@@ -131,8 +145,6 @@ class ActivationModuleWrapper(nn.Module):
                         for i, e in enumerate(p):
                             ml_logger.log_metric(self.name + '.' + n + '.' + str(i), e.item(),  step='auto')
 
-# from utils.meters import AverageMeter
-# conv_mean = AverageMeter('Conv_mean', ':.4f')
 
 class ParameterModuleWrapper(nn.Module):
     def __init__(self, name, wrapped_module, **kwargs):
@@ -150,6 +162,7 @@ class ParameterModuleWrapper(nn.Module):
         self.log_mse = False
         self.log_clustering = False
         self.bn = kwargs['bn'] if 'bn' in kwargs else None
+        self.truck_stats = False
 
         setattr(self, 'weight', wrapped_module.weight)
         setattr(self, 'bias', wrapped_module.bias)
@@ -185,9 +198,23 @@ class ParameterModuleWrapper(nn.Module):
             w = self.weight_quantization(w)
 
         out = self.forward_functor(*input, weight=w, bias=(self.bias if hasattr(self, 'bias') else None))
-        # out_c = out.transpose(0, 1).contiguous().view(out.shape[1], -1)
-        # stat_trucker.add('mean', self.name, out_c.mean(1))
-        # stat_trucker.add('var', self.name, out_c.var(1))
+
+        if self.truck_stats:
+            from utils.stats_trucker import StatsTrucker as ST
+            st = ST()
+            x = out.transpose(0, 1).contiguous().view(out.shape[1], -1)
+            mu = x.mean(1)
+            sigma = x.std(1)
+            st.add('mean', self.name, mu)
+            st.add('var', self.name, sigma ** 2)
+            st.add('skewness', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 3, dim=1))
+            st.add('kurtosis', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 4, dim=1))
+            st.add('m5', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 5, dim=1))
+            st.add('m6', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 6, dim=1))
+            st.add('m7', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 7, dim=1))
+            st.add('m8', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 8, dim=1))
+            st.add('cv', self.name, sigma / mu)
+
         return out
 
     def set_quant_method(self, method=None):
