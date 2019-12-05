@@ -216,7 +216,7 @@ def main_worker(args, ml_logger):
         # all_convs = [l for l in all_convs if 'downsample' not in l]
         all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
         all_relu6 = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU6)]
-        layers = all_relu[1:-1] + all_relu6[1:-1] + all_convs[1:-1]
+        layers = all_relu[1:-1] + all_relu6[1:-1] + all_convs[1:]
         replacement_factory = {nn.ReLU: ActivationModuleWrapper,
                                nn.ReLU6: ActivationModuleWrapper,
                                nn.Conv2d: ParameterModuleWrapper}

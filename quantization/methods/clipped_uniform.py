@@ -20,6 +20,23 @@ class ClippedUniformQuantization(UniformQuantization):
         return [(self.alpha_param_name, '{:.4f}'.format(getattr(self, self.alpha_param_name).item()))] + rpr
 
 
+class FixedClipValueQuantization(ClippedUniformQuantization):
+    def __init__(self, module, num_bits, symmetric, uint=False, stochastic=False, kwargs={}):
+        super(FixedClipValueQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic)
+        self.clip_value = kwargs['clip_value']
+        self.device = kwargs['device']
+        with torch.no_grad():
+            self.register_buffer(self.alpha_param_name, torch.tensor([self.clip_value]).to(self.device))
+
+
+class MaxAbsStaticQuantization(ClippedUniformQuantization):
+    def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False, kwargs={}):
+        super(MaxAbsStaticQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic)
+
+        with torch.no_grad():
+            self.register_buffer(self.alpha_param_name, tensor.new_tensor([tensor.abs().max()]))
+
+
 class LearnedStepSizeQuantization(ClippedUniformQuantization):
     def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False, **kwargs):
         super(LearnedStepSizeQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic)
@@ -45,23 +62,6 @@ class LearnedStepSizeQuantization(ClippedUniformQuantization):
         return [
                 LearnedStepSizeQuantization.alpha_param_name
                 ]
-
-
-class FixedClipValueQuantization(ClippedUniformQuantization):
-    def __init__(self, module, num_bits, symmetric, uint=False, stochastic=False, kwargs={}):
-        super(FixedClipValueQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic)
-        self.clip_value = kwargs['clip_value']
-        self.device = kwargs['device']
-        with torch.no_grad():
-            self.register_buffer(self.alpha_param_name, torch.tensor([self.clip_value]).to(self.device))
-
-
-class MaxAbsStaticQuantization(ClippedUniformQuantization):
-    def __init__(self, module, tensor, num_bits, symmetric, uint=False, stochastic=False, kwargs={}):
-        super(MaxAbsStaticQuantization, self).__init__(module, num_bits, symmetric, uint, stochastic)
-
-        with torch.no_grad():
-            self.register_buffer(self.alpha_param_name, tensor.new_tensor([tensor.abs().max()]))
 
 
 class AngDistanceQuantization(ClippedUniformQuantization):
