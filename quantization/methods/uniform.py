@@ -107,6 +107,15 @@ class UniformQuantization(QuantizationBase):
 
         return t_q
 
+    # def __distiller_quantize__(self, tensor, alpha):
+    #     # Leave one bit for sign
+    #     n = self.qmax
+    #     scale = n / alpha
+    #     t_q = torch.clamp(torch.round(tensor * scale), self.qmin, self.qmax)
+    #     t_q = t_q / scale
+    #     return t_q
+
+
     # def __quantize_gemmlowp__(self, tensor, min_, max_):
     #     assert self.uint is True
     #     delta = (max_ - min_) / (self.num_bins - 1)

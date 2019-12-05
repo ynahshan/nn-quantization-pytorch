@@ -21,6 +21,25 @@ torch_dtypes = {
 }
 
 
+def normalize_module_name(layer_name):
+    """Normalize a module's name.
+
+    PyTorch let's you parallelize the computation of a model, by wrapping a model with a
+    DataParallel module.  Unfortunately, this changs the fully-qualified name of a module,
+    even though the actual functionality of the module doesn't change.
+    Many time, when we search for modules by name, we are indifferent to the DataParallel
+    module and want to use the same module name whether the module is parallel or not.
+    We call this module name normalization, and this is implemented here.
+    """
+    modules = layer_name.split('.')
+    try:
+        idx = modules.index('module')
+    except ValueError:
+        return layer_name
+    del modules[idx]
+    return '.'.join(modules)
+
+
 def expand_shape(base_shape, target_shape):
     d = len(target_shape) - len(base_shape)
     for i in range(d):

@@ -26,6 +26,7 @@ from torch.optim.lr_scheduler import StepLR
 from models.resnet import resnet as custom_resnet
 from models.inception import inception_v3 as custom_inception
 from quantization.qat.module_wrapper import ActivationModuleWrapper, ParameterModuleWrapper
+from utils.misc import normalize_module_name
 
 home = str(Path.home())
 
@@ -77,6 +78,7 @@ parser.add_argument('--seed', default=0, type=int,
 parser.add_argument('--gpu_ids', default=[0], type=int, nargs='+',
                     help='GPU ids to use (e.g 0 1 2 3)')
 parser.add_argument('--lr_freeze', action='store_true', help='Freeze learning rate', default=False)
+parser.add_argument('--bn_folding', '-bnf', action='store_true', help='Apply Batch Norm folding', default=False)
 
 parser.add_argument('--quantize', '-q', action='store_true', help='Enable quantization', default=False)
 parser.add_argument('--experiment', '-exp', help='Name of the experiment', default='default')
@@ -160,6 +162,7 @@ def main_worker(args, ml_logger):
             # best_acc1 = checkpoint['best_acc1']
             # best_acc1 may be from a checkpoint from a different GPU
             # best_acc1 = best_acc1.to(device)
+            checkpoint['state_dict'] = {normalize_module_name(k): v for k, v in checkpoint['state_dict'].items()}
             model.load_state_dict(checkpoint['state_dict'], strict=False)
             # optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
@@ -204,6 +207,11 @@ def main_worker(args, ml_logger):
 
     mq = None
     if args.quantize:
+        if args.bn_folding:
+            print("Applying batch-norm folding ahead of post-training quantization")
+            from utils.absorb_bn import search_absorbe_bn
+            search_absorbe_bn(model)
+
         all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
         # all_convs = [l for l in all_convs if 'downsample' not in l]
         all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]

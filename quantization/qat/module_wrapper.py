@@ -180,7 +180,7 @@ class ParameterModuleWrapper(nn.Module):
             self.weight_quantization_default = quantization_mapping[self.qtype](self, self.weight,
                                                                            self.bit_weights, symmetric=True,
                                                                            uint=True, kwargs=kwargs)
-            # self.weight_quantization_default = Noise(self, self.weight)
+
             self.weight_quantization = self.weight_quantization_default
             if hasattr(self.weight_quantization, 'optim_parameters'):
                 self.optimizer_bridge.add_quantization_params(self.weight_quantization.optim_parameters())
