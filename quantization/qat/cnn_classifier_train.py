@@ -79,6 +79,7 @@ parser.add_argument('--gpu_ids', default=[0], type=int, nargs='+',
                     help='GPU ids to use (e.g 0 1 2 3)')
 parser.add_argument('--lr_freeze', action='store_true', help='Freeze learning rate', default=False)
 parser.add_argument('--bn_folding', '-bnf', action='store_true', help='Apply Batch Norm folding', default=False)
+parser.add_argument('--log_stats', '-ls', action='store_true', help='Log statistics', default=False)
 
 parser.add_argument('--quantize', '-q', action='store_true', help='Enable quantization', default=False)
 parser.add_argument('--experiment', '-exp', help='Name of the experiment', default='default')
@@ -138,6 +139,9 @@ def main_worker(args, ml_logger):
     if args.gpu_ids is not None:
         print("Use GPU: {} for training".format(args.gpu_ids))
 
+    if args.log_stats:
+        from utils.stats_trucker import StatsTrucker as ST
+        ST("W{}A{}".format(args.bit_weights, args.bit_act))
 
     if 'resnet' in args.arch and args.custom_resnet:
         model = custom_resnet(arch=args.arch, pretrained=args.pretrained, depth=arch2depth(args.arch), dataset=args.dataset)
@@ -233,7 +237,8 @@ def main_worker(args, ml_logger):
             mq.freeze()
 
     if args.evaluate:
-        validate(val_loader, model, criterion, args, device)
+        acc = validate(val_loader, model, criterion, args, device)
+        ml_logger.log_metric('Val Acc1', acc)
         return
 
     # evaluate on validation set
