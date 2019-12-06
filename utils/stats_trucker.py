@@ -17,9 +17,9 @@ def exit(trucker):
 
 
 class StatsTrucker(metaclass=Singleton):
-    def __init__(self):
+    def __init__(self, sufix):
         self.folder = 'mxt-sim/stats'
-        self.fname = 'stats.csv'
+        self.fname = 'stats_{}.pkl'.format(sufix)
         self.mode = 'mean'
         self.stats = {}
         self.exited = False
@@ -46,7 +46,7 @@ class StatsTrucker(metaclass=Singleton):
         #     shutil.rmtree(location)
         if not os.path.exists(location):
             os.makedirs(location)
-        f = open(os.path.join(location, 'stats.pkl'), 'wb')
+        f = open(os.path.join(location, self.fname), 'wb')
         pickle.dump(self.stats, f)
         f.close()
         self.exited = True

@@ -72,7 +72,7 @@ class ActivationModuleWrapper(nn.Module):
         self.qtype = kwargs['qtype']
         self.enabled = True
         self.active = True
-        self.truck_stats = False
+        self.truck_stats = kwargs['log_stats']
 
         if self.bits_out is not None:
             self.out_quantization = self.out_quantization_default = None
