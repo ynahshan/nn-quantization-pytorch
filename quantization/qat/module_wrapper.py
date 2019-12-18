@@ -91,7 +91,7 @@ class ActivationModuleWrapper(nn.Module):
 
     def load_state_dict(self, state_dict):
         if hasattr(self, 'out_quantization'):
-            t = state_dict[list(state_dict.keys())[0]].new_tensor([0.])
+            t = state_dict[list(state_dict.keys())[0]].new_tensor([0.], dtype=torch.float)
             q = LearnedStepSizeQuantization(self, t, self.bits_out, symmetric=(not is_positive(self.wrapped_module)),
                                                                               uint=True, kwargs=None)
 
