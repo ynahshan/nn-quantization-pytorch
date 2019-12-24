@@ -119,15 +119,14 @@ class ActivationModuleWrapper(nn.Module):
             x = out.transpose(0, 1).contiguous().view(out.shape[1], -1)
             mu = x.mean(1)
             sigma = x.std(1)
-            st.add('mean', self.name, mu)
-            st.add('var', self.name, sigma ** 2)
-            st.add('skewness', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 3, dim=1))
-            st.add('kurtosis', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 4, dim=1))
-            st.add('m5', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 5, dim=1))
-            st.add('m6', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 6, dim=1))
-            st.add('m7', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 7, dim=1))
-            st.add('m8', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 8, dim=1))
-            st.add('cv', self.name, sigma / mu)
+            st.add('relu_mean', self.name, mu)
+            st.add('relu_var', self.name, sigma ** 2)
+            st.add('relu_skewness', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 3, dim=1))
+            st.add('relu_kurtosis', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 4, dim=1))
+            st.add('relu_m5', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 5, dim=1))
+            st.add('relu_m6', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 6, dim=1))
+            st.add('relu_m7', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 7, dim=1))
+            st.add('relu_m8', self.name, torch.mean(((x - mu.view(-1, 1)) / sigma.view(-1, 1)) ** 8, dim=1))
 
         return out
 
