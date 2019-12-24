@@ -237,8 +237,37 @@ def main_worker(args, ml_logger):
             mq.freeze()
 
     if args.evaluate:
+        if args.log_stats:
+            mean = []
+            var = []
+            skew = []
+            kurt = []
+            for n, p in model.named_parameters():
+                if n.replace('.weight', '') in all_convs[1:]:
+                    mu = p.mean()
+                    std = p.std()
+                    mean.append((n, mu.item()))
+                    var.append((n, (std**2).item()))
+                    skew.append((n, torch.mean(((p - mu)/std)**3).item()))
+                    kurt.append((n, torch.mean(((p - mu)/std)**4).item()))
+            for i in range(len(mean)):
+                ml_logger.log_metric(mean[i][0]+'.mean', mean[i][1])
+                ml_logger.log_metric(var[i][0] + '.var', var[i][1])
+                ml_logger.log_metric(skew[i][0] + '.skewness', skew[i][1])
+                ml_logger.log_metric(kurt[i][0] + '.kurtosis', kurt[i][1])
+
+            ml_logger.log_metric('weight_mean', np.mean([s[1] for s in mean]))
+            ml_logger.log_metric('weight_var', np.mean([s[1] for s in var]))
+            ml_logger.log_metric('weight_skewness', np.mean([s[1] for s in skew]))
+            ml_logger.log_metric('weight_kurtosis', np.mean([s[1] for s in kurt]))
+
+
         acc = validate(val_loader, model, criterion, args, device)
         ml_logger.log_metric('Val Acc1', acc)
+        if args.log_stats:
+            stats = ST().get_stats()
+            for s in stats:
+                ml_logger.log_metric(s, np.mean(stats[s]))
         return
 
     # evaluate on validation set

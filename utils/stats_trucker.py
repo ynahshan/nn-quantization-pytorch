@@ -12,6 +12,16 @@ import pickle
 home = str(Path.home())
 
 
+def list_mean(l):
+    if len(l) == 0:
+        return None
+
+    res = l[0].clone()
+    for t in l[1:]:
+        res += t
+    return res / len(l)
+
+
 def exit(trucker):
     trucker.__exit__()
 
@@ -35,6 +45,13 @@ class StatsTrucker(metaclass=Singleton):
             self.stats[stat_name][id] = [value]
         else:
             self.stats[stat_name][id].append(value)
+
+    def get_stats(self):
+        stats = {}
+        for s in self.stats:
+            stats[s] = [list_mean(self.stats[s][k]).mean().item() for k in self.stats[s]]
+
+        return stats
 
     def __exit__(self, *args):
         if self.exited:
