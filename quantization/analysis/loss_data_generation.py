@@ -85,7 +85,7 @@ def main(args):
     custom_resnet = True
     inf_model = CnnModel(args.arch, custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
+                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
 
     all_layers = []
     if args.bit_weights is not None:
@@ -138,7 +138,7 @@ def main(args):
         torch.backends.cudnn.benchmark = False
         inf_model = CnnModel(args.arch, custom_resnet, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                              batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                             cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
+                             cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
 
         mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
         loss = inf_model.evaluate_calibration()

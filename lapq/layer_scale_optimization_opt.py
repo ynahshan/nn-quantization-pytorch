@@ -75,6 +75,7 @@ parser.add_argument('-siv', type=float, help='Value for static initialization', 
 
 parser.add_argument('--dont_fix_np_seed', '-dfns', action='store_true', help='Do not fix np seed even if seed specified')
 parser.add_argument('--bcorr_w', '-bcw', action='store_true', help='Bias correction for weights', default=False)
+parser.add_argument('--tag', help='Tag for logging purposes', default='n/a')
 
 
 # TODO: refactor this
@@ -145,6 +146,9 @@ def main(args, ml_logger):
     cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+    if args.tag is not None:
+        ml_logger.mlflow.log_param('tag', args.tag)
+
     args.qtype = 'max_static'
     # create model
     # Always enable shuffling to avoid issues where we get bad results due to weak statistics
@@ -152,7 +156,7 @@ def main(args, ml_logger):
     custom_inception = True
     inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
+                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
 
     layers = []
     # TODO: make it more generic
@@ -172,7 +176,11 @@ def main(args, ml_logger):
     print("max loss: {:.4f}".format(loss.item()))
     max_point = mq.get_clipping()
     ml_logger.log_metric('Loss max', loss.item(), step='auto')
-    data = {'max': {'alpha': max_point.cpu().numpy(), 'loss': loss.item()}}
+
+    # evaluate
+    maxabs_acc = inf_model.validate()
+    ml_logger.log_metric('Acc maxabs', maxabs_acc, step='auto')
+    data = {'max': {'alpha': max_point.cpu().numpy(), 'loss': loss.item(), 'acc': maxabs_acc}}
 
     def eval_pnorm(p):
         args.qtype = 'lp_norm'
@@ -187,7 +195,7 @@ def main(args, ml_logger):
         torch.backends.cudnn.benchmark = False
         inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                              batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                             cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
+                             cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
 
         mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
         loss = inf_model.evaluate_calibration()
@@ -204,18 +212,21 @@ def main(args, ml_logger):
     del inf_model
     del mq
 
+    print("Evaluate L2 norm optimization")
     l2_point, l2_loss, l2_acc = eval_pnorm(2.)
     print("loss l2: {:.4f}".format(l2_loss.item()))
     ml_logger.log_metric('Loss l2', l2_loss.item(), step='auto')
     ml_logger.log_metric('Acc l2', l2_acc, step='auto')
     data['l2'] = {'alpha': l2_point.cpu().numpy(), 'loss': l2_loss.item(), 'acc': l2_acc}
 
+    print("Evaluate L2.5 norm optimization")
     l25_point, l25_loss, l25_acc = eval_pnorm(2.5)
     print("loss l2.5: {:.4f}".format(l25_loss.item()))
     ml_logger.log_metric('Loss l2.5', l25_loss.item(), step='auto')
     ml_logger.log_metric('Acc l2.5', l25_acc, step='auto')
     data['l2.5'] = {'alpha': l25_point.cpu().numpy(), 'loss': l25_loss.item(), 'acc': l25_acc}
 
+    print("Evaluate L3 norm optimization")
     l3_point, l3_loss, l3_acc = eval_pnorm(3.)
     print("loss l3: {:.4f}".format(l3_loss.item()))
     ml_logger.log_metric('Loss l3', l3_loss.item(), step='auto')
@@ -242,7 +253,7 @@ def main(args, ml_logger):
     torch.backends.cudnn.benchmark = False
     inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
+                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
 
     mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
 
@@ -259,8 +270,8 @@ def main(args, ml_logger):
     global _eval_count, _min_loss
     _min_loss = lp_loss.item()
 
-    idx = np.argmax([l2_acc, l25_acc, l3_acc, lp_acc])
-    init = [l2_point, l25_point, l3_point, lp_point][idx]
+    idx = np.argmax([maxabs_acc, l2_acc, l25_acc, l3_acc, lp_acc])
+    init = [max_point, l2_point, l25_point, l3_point, lp_point][idx]
 
     # run optimizer
     min_options = {}
@@ -303,6 +314,7 @@ def main(args, ml_logger):
 
     print("Starting coordinate descent")
     args.min_method = "CD"
+    min_options['maxiter'] = 1  # Perform only one iteration of coordinate descent to avoid divergence
     _iter = count(0)
     global _eval_count
     _eval_count = count(0)
