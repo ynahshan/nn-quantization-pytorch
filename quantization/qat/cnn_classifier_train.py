@@ -26,7 +26,7 @@ from torch.optim.lr_scheduler import StepLR
 from models.resnet import resnet as custom_resnet
 from models.inception import inception_v3 as custom_inception
 from quantization.qat.module_wrapper import ActivationModuleWrapper, ParameterModuleWrapper
-from utils.misc import normalize_module_name
+from utils.misc import normalize_module_name, arch2depth
 
 home = str(Path.home())
 
@@ -91,20 +91,6 @@ parser.add_argument('--qtype', default='None', help='Type of quantization method
 parser.add_argument('--bcorr_w', '-bcw', action='store_true', help='Bias correction for weights', default=False)
 
 best_acc1 = 0
-
-
-def arch2depth(arch):
-    depth = None
-    if 'resnet18' in arch:
-        depth = 18
-    elif 'resnet34' in arch:
-        depth = 34
-    elif 'resnet50' in arch:
-        depth = 50
-    elif 'resnet101' in arch:
-        depth = 101
-
-    return depth
 
 
 def main():

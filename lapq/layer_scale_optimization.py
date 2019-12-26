@@ -148,7 +148,7 @@ def main(args, ml_logger):
     # Always enable shuffling to avoid issues where we get bad results due to weak statistics
     inf_model = CnnModel(args.arch, args.custom_resnet, args.custom_inception,args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size)
+                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
 
     layers = []
     # TODO: make it more generic

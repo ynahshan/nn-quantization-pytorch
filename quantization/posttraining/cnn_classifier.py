@@ -12,11 +12,12 @@ from utils.meters import AverageMeter, ProgressMeter, accuracy
 from torch.utils.data import RandomSampler
 from models.resnet import resnet as custom_resnet
 from models.inception import inception_v3 as custom_inception
+from utils.misc import normalize_module_name, arch2depth
 
 
 class CnnModel(object):
     def __init__(self, arch, use_custom_resnet, use_custom_inception, pretrained, dataset, gpu_ids, datapath, batch_size, shuffle, workers,
-                 print_freq, cal_batch_size, cal_set_size):
+                 print_freq, cal_batch_size, cal_set_size, args):
         self.arch = arch
         self.use_custom_resnet = use_custom_resnet
         self.pretrained = pretrained
@@ -32,22 +33,31 @@ class CnnModel(object):
 
         # create model
         if 'resnet' in arch and use_custom_resnet:
-            model = custom_resnet(arch=arch, pretrained=pretrained, depth=self.__arch2depth__(arch),
+            model = custom_resnet(arch=arch, pretrained=pretrained, depth=arch2depth(arch),
                                   dataset=dataset)
         elif 'inception_v3' in arch and use_custom_inception:
             model = custom_inception(pretrained=pretrained)
-
-        elif pretrained:
-            print("=> using pre-trained model '{}'".format(arch))
-            model = models.__dict__[arch](pretrained=True)
         else:
-            print("=> creating model '{}'".format(arch))
-            model = models.__dict__[arch]()
+            print("=> using pre-trained model '{}'".format(arch))
+            model = models.__dict__[arch](pretrained=pretrained)
 
         self.device = torch.device('cuda:{}'.format(gpu_ids[0]))
 
         torch.cuda.set_device(gpu_ids[0])
         model = model.to(self.device)
+
+        # optionally resume from a checkpoint
+        if args.resume:
+            if os.path.isfile(args.resume):
+                print("=> loading checkpoint '{}'".format(args.resume))
+                checkpoint = torch.load(args.resume, self.device)
+                args.start_epoch = checkpoint['epoch']
+                checkpoint['state_dict'] = {normalize_module_name(k): v for k, v in checkpoint['state_dict'].items()}
+                model.load_state_dict(checkpoint['state_dict'], strict=False)
+                print("=> loaded checkpoint '{}' (epoch {})"
+                      .format(args.resume, checkpoint['epoch']))
+            else:
+                print("=> no checkpoint found at '{}'".format(args.resume))
 
         if len(gpu_ids) > 1:
             # DataParallel will divide and allocate batch_size to all available GPUs
