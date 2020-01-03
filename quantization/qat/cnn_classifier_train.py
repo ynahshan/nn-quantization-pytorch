@@ -3,6 +3,9 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 
+from hessian import hessian, gradient
+from tqdm import tqdm
+
 import random
 import shutil
 import time
@@ -206,7 +209,7 @@ def main_worker(args, ml_logger):
         # all_convs = [l for l in all_convs if 'downsample' not in l]
         all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
         all_relu6 = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU6)]
-        layers = all_relu[1:-1] + all_relu6[1:-1] + all_convs[1:]
+        layers = all_relu[1:11] + all_relu6[1:-1] + all_convs[1:11]
         replacement_factory = {nn.ReLU: ActivationModuleWrapper,
                                nn.ReLU6: ActivationModuleWrapper,
                                nn.Conv2d: ParameterModuleWrapper}
@@ -248,7 +251,7 @@ def main_worker(args, ml_logger):
             ml_logger.log_metric('weight_kurtosis', np.mean([s[1] for s in kurt]))
 
 
-        acc = validate(val_loader, model, criterion, args, device)
+        acc = validate_h(val_loader, model, criterion, args, device)
         ml_logger.log_metric('Val Acc1', acc)
         if args.log_stats:
             stats = ST().get_stats()
@@ -386,6 +389,78 @@ def validate(val_loader, model, criterion, args, device):
         # TODO: this should also be done with the ProgressMeter
         print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
               .format(top1=top1, top5=top5))
+
+    return top1.avg
+
+
+def validate_h(val_loader, model, criterion, args, device):
+    batch_time = AverageMeter('Time', ':6.3f')
+    losses = AverageMeter('Loss', ':.4e')
+    top1 = AverageMeter('Acc@1', ':6.2f')
+    top5 = AverageMeter('Acc@5', ':6.2f')
+    progress = ProgressMeter(len(val_loader), batch_time, losses, top1, top5,
+                             prefix='Test: ')
+
+    # switch to evaluate mode
+    model.eval()
+
+    end = time.time()
+    H = None
+    Gcurv = 0
+    count = 0
+    for i, (images, target) in tqdm(enumerate(val_loader)):
+        alphas = [layer.alpha for layer in model.modules() if hasattr(layer, 'alpha')]
+        for a in alphas:
+            a.requires_grad = True
+        images = images.to(device, non_blocking=True)
+        target = target.to(device, non_blocking=True)
+
+        # compute output
+        output = model(images)
+        loss = criterion(output, target)
+
+        if i > 0:
+            h = hessian(loss, alphas, create_graph=True)
+            if h.numel() > 0:
+                if H is None:
+                    H = h.detach().cpu().numpy()
+                else:
+                    H = H + h.detach().cpu().numpy()
+                count += 1
+
+                try:
+                    det_h = torch.det(h.detach())
+                    del h
+                    g = gradient(loss, alphas, create_graph=True)
+                    gauss_curv = det_h / (torch.norm(g.detach(), p=2) ** 2 + 1) ** 2
+                    Gcurv += gauss_curv.item()
+                    del g
+                except:
+                    pass
+
+            if i == 20:
+                print("\nAveraging  over {} input samples".format(args.batch_size*count))
+                print("Gaussian curvature {}".format(Gcurv / count))
+                print(torch.tensor(H / count))
+                break
+
+        # measure accuracy and record loss
+        acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        losses.update(loss.item(), images.size(0))
+        top1.update(acc1.item(), images.size(0))
+        top5.update(acc5.item(), images.size(0))
+
+        # measure elapsed time
+        batch_time.update(time.time() - end)
+        end = time.time()
+
+        if i % args.print_freq == 0:
+            progress.print(i)
+
+    # TODO: this should also be done with the ProgressMeter
+    print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
+          .format(top1=top1, top5=top5))
+
 
     return top1.avg
 

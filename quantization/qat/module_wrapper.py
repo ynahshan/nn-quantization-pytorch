@@ -2,7 +2,8 @@ import os
 import torch.nn as nn
 import torch
 from quantization.methods.uniform import UniformQuantization, MinMaxQuantization
-from quantization.methods.clipped_uniform import LearnedStepSizeQuantization, MaxAbsStaticQuantization
+from quantization.methods.clipped_uniform import LearnedStepSizeQuantization, MaxAbsStaticQuantization, \
+    L1NormQuantization, L2NormQuantization, L3NormQuantization
 from quantization.methods.non_uniform import LearnableDifferentiableQuantization, KmeansQuantization, LearnedCentroidsQuantization
 from quantization.methods.stochastic import Noise
 import matplotlib
@@ -13,7 +14,10 @@ import numpy as np
 
 quantization_mapping = {'max_static': MaxAbsStaticQuantization,
                         'min_max': MinMaxQuantization,
-                        'lsq': LearnedStepSizeQuantization
+                        'lsq': LearnedStepSizeQuantization,
+                        'l3_norm': L3NormQuantization,
+                        'l2_norm': L2NormQuantization,
+                        'l1_norm': L1NormQuantization,
                         }
 
 
