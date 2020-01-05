@@ -18,14 +18,12 @@ import torchvision.models as models
 import numpy as np
 from utils.data import get_dataset
 from utils.preprocess import get_transform
-from quantization.quantizer import ModelQuantizer, OptimizerBridge
 from pathlib import Path
 from utils.mllog import MLlogger
 from utils.meters import AverageMeter, ProgressMeter, accuracy
 from torch.optim.lr_scheduler import StepLR
 from models.resnet import resnet as custom_resnet
 from models.inception import inception_v3 as custom_inception
-from quantization.qat.module_wrapper import ActivationModuleWrapper, ParameterModuleWrapper
 from utils.misc import normalize_module_name, arch2depth
 from quantization.regularization.kurtosis_regularization import KurtosisLoss
 
@@ -80,17 +78,7 @@ parser.add_argument('--gpu_ids', default=[0], type=int, nargs='+',
                     help='GPU ids to use (e.g 0 1 2 3)')
 parser.add_argument('--lr_freeze', action='store_true', help='Freeze learning rate', default=False)
 parser.add_argument('--bn_folding', '-bnf', action='store_true', help='Apply Batch Norm folding', default=False)
-parser.add_argument('--log_stats', '-ls', action='store_true', help='Log statistics', default=False)
-
-parser.add_argument('--quantize', '-q', action='store_true', help='Enable quantization', default=False)
 parser.add_argument('--experiment', '-exp', help='Name of the experiment', default='default')
-parser.add_argument('--bit_weights', '-bw', type=int, help='Number of bits for weights', default=None)
-parser.add_argument('--bit_act', '-ba', type=int, help='Number of bits for activations', default=None)
-parser.add_argument('--model_freeze', '-mf', action='store_true', help='Freeze model parameters', default=False)
-parser.add_argument('--temperature', '-t', type=float, help='Temperature parameter for sigmoid quantization', default=None)
-parser.add_argument('--qtype', default='None', help='Type of quantization method')
-parser.add_argument('--bcorr_w', '-bcw', action='store_true', help='Bias correction for weights', default=False)
-
 parser.add_argument('-kt', '--kurtosis_target', default=None, type=float,
                     help='Target for kurtosis loss. Default is None - no kurtosis regularization.')
 parser.add_argument('-kl', '--kurtosis_lambda', default=1.0, type=float,
@@ -121,7 +109,7 @@ def main():
         torch.backends.cudnn.benchmark = False
 
     with MLlogger(os.path.join(home, 'mxt-sim/mllog_runs'), args.experiment, args,
-                  name_args=[args.arch, args.dataset, "W{}A{}".format(args.bit_weights, args.bit_act)]) as ml_logger:
+                  name_args=[args.arch, args.dataset]) as ml_logger:
         main_worker(args, ml_logger)
 
 
@@ -130,10 +118,6 @@ def main_worker(args, ml_logger):
 
     if args.gpu_ids is not None:
         print("Use GPU: {} for training".format(args.gpu_ids))
-
-    if args.log_stats:
-        from utils.stats_trucker import StatsTrucker as ST
-        ST("W{}A{}".format(args.bit_weights, args.bit_act))
 
     if 'resnet' in args.arch and args.custom_resnet:
         model = custom_resnet(arch=args.arch, pretrained=args.pretrained, depth=arch2depth(args.arch), dataset=args.dataset)
@@ -197,73 +181,13 @@ def main_worker(args, ml_logger):
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-    # TODO: replace this call by initialization on small subset of training data
-    # TODO: enable for activations
-    # validate(val_loader, model, criterion, args, device)
-
     optimizer = torch.optim.SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     lr_scheduler = StepLR(optimizer, step_size=args.lr_step, gamma=0.1)
 
-    mq = None
-    if args.quantize:
-        if args.bn_folding:
-            print("Applying batch-norm folding ahead of post-training quantization")
-            from utils.absorb_bn import search_absorbe_bn
-            search_absorbe_bn(model)
-
-        all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
-        # all_convs = [l for l in all_convs if 'downsample' not in l]
-        all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
-        all_relu6 = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU6)]
-        layers = all_relu[1:-1] + all_relu6[1:-1] + all_convs[1:]
-        replacement_factory = {nn.ReLU: ActivationModuleWrapper,
-                               nn.ReLU6: ActivationModuleWrapper,
-                               nn.Conv2d: ParameterModuleWrapper}
-        mq = ModelQuantizer(model, args, layers, replacement_factory,
-                            OptimizerBridge(optimizer, settings={'algo': 'SGD', 'dataset': args.dataset}))
-
-        if args.resume:
-            # Load quantization parameters from state dict
-            mq.load_state_dict(checkpoint['state_dict'])
-
-        mq.log_quantizer_state(ml_logger, -1)
-
-        if args.model_freeze:
-            mq.freeze()
-
     if args.evaluate:
-        if args.log_stats:
-            mean = []
-            var = []
-            skew = []
-            kurt = []
-            for n, p in model.named_parameters():
-                if n.replace('.weight', '') in all_convs[1:]:
-                    mu = p.mean()
-                    std = p.std()
-                    mean.append((n, mu.item()))
-                    var.append((n, (std**2).item()))
-                    skew.append((n, torch.mean(((p - mu)/std)**3).item()))
-                    kurt.append((n, torch.mean(((p - mu)/std)**4).item()))
-            for i in range(len(mean)):
-                ml_logger.log_metric(mean[i][0]+'.mean', mean[i][1])
-                ml_logger.log_metric(var[i][0] + '.var', var[i][1])
-                ml_logger.log_metric(skew[i][0] + '.skewness', skew[i][1])
-                ml_logger.log_metric(kurt[i][0] + '.kurtosis', kurt[i][1])
-
-            ml_logger.log_metric('weight_mean', np.mean([s[1] for s in mean]))
-            ml_logger.log_metric('weight_var', np.mean([s[1] for s in var]))
-            ml_logger.log_metric('weight_skewness', np.mean([s[1] for s in skew]))
-            ml_logger.log_metric('weight_kurtosis', np.mean([s[1] for s in kurt]))
-
-
         acc = validate(val_loader, model, criterion, args, device)
         ml_logger.log_metric('Val Acc1', acc)
-        if args.log_stats:
-            stats = ST().get_stats()
-            for s in stats:
-                ml_logger.log_metric(s, np.mean(stats[s]))
         return
 
     # evaluate on validation set
@@ -272,7 +196,7 @@ def main_worker(args, ml_logger):
 
     for epoch in range(0, args.epochs):
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args, device, ml_logger, val_loader, mq)
+        train(train_loader, model, criterion, optimizer, epoch, args, device, ml_logger)
 
         if not args.lr_freeze:
             lr_scheduler.step()
@@ -280,9 +204,6 @@ def main_worker(args, ml_logger):
         # evaluate on validation set
         acc1 = validate(val_loader, model, criterion, args, device)
         ml_logger.log_metric('Val Acc1', acc1,  step='auto')
-
-        if args.quantize:
-            mq.log_quantizer_state(ml_logger, epoch)
 
         # remember best acc@1 and save checkpoint
         is_best = acc1 > best_acc1
@@ -297,7 +218,7 @@ def main_worker(args, ml_logger):
         }, is_best)
 
 
-def train(train_loader, model, criterion, optimizer, epoch, args, device, ml_logger, val_loader, mq=None):
+def train(train_loader, model, criterion, optimizer, epoch, args, device, ml_logger):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
