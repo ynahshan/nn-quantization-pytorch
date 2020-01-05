@@ -168,12 +168,32 @@ def main_worker(args, ml_logger):
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
+    def params_bn_folded(model):
+        convs = [m for n, m in model.named_modules() if isinstance(m, nn.Conv2d)][1:]
+        bn = [m for n, m in model.named_modules() if isinstance(m, nn.BatchNorm2d)][1:]
+        assert len(convs) == len(bn)
+
+        params = []
+        for i in range(len(convs)):
+            sigma = torch.sqrt(bn[i].running_var + bn[i].eps)
+            if bn[i].affine:
+                w = convs[i].weight * bn[i].weight.view(sigma.numel(), 1, 1, 1) / sigma.view(sigma.numel(), 1, 1, 1)
+            else:
+                w = convs[i].weight / sigma.view(sigma.numel(), 1, 1, 1)
+
+            params.append(w)
+
+        return params
+
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().to(device)
     if args.kurtosis_target is not None:
         # Kurtosis regularization
-        all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
-        criterion = KurtosisLoss(args.kurtosis_target, args.kurtosis_lambda, model, criterion, all_convs[1:])
+        if args.bn_folding:
+            params_func = params_bn_folded
+        else:
+            params_func = lambda model: [m.weight for n, m in model.named_modules() if isinstance(m, nn.Conv2d)][1:]
+        criterion = KurtosisLoss(args.kurtosis_target, args.kurtosis_lambda, model, criterion, params_func)
 
     train_data = get_dataset(args.dataset, 'train', default_transform['train'])
     train_loader = torch.utils.data.DataLoader(
