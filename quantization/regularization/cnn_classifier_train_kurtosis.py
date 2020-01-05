@@ -83,6 +83,7 @@ parser.add_argument('-kt', '--kurtosis_target', default=None, type=float,
                     help='Target for kurtosis loss. Default is None - no kurtosis regularization.')
 parser.add_argument('-kl', '--kurtosis_lambda', default=1.0, type=float,
                     help='Lambda factor for kurtosis loss. Default is 1.0.')
+parser.add_argument('--tag', help='Tag', default='')
 
 best_acc1 = 0
 
@@ -232,6 +233,8 @@ def main_worker(args, ml_logger):
         save_checkpoint({
             'epoch': epoch + 1,
             'arch': args.arch,
+            'dataset': args.dataset,
+            'tag': args.tag,
             'state_dict': model.state_dict() if len(args.gpu_ids) == 1 else model.module.state_dict(),
             'best_acc1': best_acc1,
             'optimizer': optimizer.state_dict(),
@@ -325,7 +328,7 @@ def validate(val_loader, model, criterion, args, device):
 
 
 def save_checkpoint(state, is_best, filename='last_checkpoint.pth.tar'):
-    ckpt_dir = os.path.join(home, 'mxt-sim', 'ckpt', state['arch'])
+    ckpt_dir = os.path.join(home, 'mxt-sim', 'ckpt', state['arch'] + '_' + state['dataset'] + '_' + state['tag'])
     if not os.path.exists(ckpt_dir):
         os.makedirs(ckpt_dir)
     ckpt_path = os.path.join(ckpt_dir, filename)
