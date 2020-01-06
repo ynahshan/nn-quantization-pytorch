@@ -68,6 +68,11 @@ class CnnModel(object):
 
         self.model = model
 
+        if args.bn_folding:
+            print("Applying batch-norm folding ahead of post-training quantization")
+            from utils.absorb_bn import search_absorbe_bn
+            search_absorbe_bn(model)
+
         # define loss function (criterion) and optimizer
         self.criterion = torch.nn.CrossEntropyLoss().to(self.device)
 

@@ -76,6 +76,7 @@ parser.add_argument('-siv', type=float, help='Value for static initialization', 
 parser.add_argument('--dont_fix_np_seed', '-dfns', action='store_true', help='Do not fix np seed even if seed specified')
 parser.add_argument('--bcorr_w', '-bcw', action='store_true', help='Bias correction for weights', default=False)
 parser.add_argument('--tag', help='Tag for logging purposes', default='n/a')
+parser.add_argument('--bn_folding', '-bnf', action='store_true', help='Apply Batch Norm folding', default=False)
 
 
 # TODO: refactor this
