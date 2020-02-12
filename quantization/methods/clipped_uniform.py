@@ -96,9 +96,9 @@ class LpNormQuantization(ClippedUniformQuantization):
         self.register_buffer(self.alpha_param_name, tensor.new_tensor([opt_alpha]))
 
     def estimate_quant_error(self, alpha, x):
-        N = x.numel() if self.symmetric else x[x != 0].numel()
+        # N = x.numel() if self.symmetric else x[x != 0].numel()
         xq = self.__quantize__(x, alpha)
-        err = torch.sum(torch.abs(xq - x) ** self.p) / N
+        err = torch.mean(torch.abs(xq - x) ** self.p) #/ N
         return err.item()
 
 

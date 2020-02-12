@@ -85,22 +85,6 @@ def main(args):
     # Always enable shuffling to avoid issues where we get bad results due to weak statistics
     custom_resnet = True
     custom_inception = True
-    inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids,
-                         args.datapath,
-                         batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
-
-    all_layers = []
-    if args.bit_weights is not None:
-        all_layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.Conv2d)][1:-1]
-    if args.bit_act is not None:
-        all_layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.ReLU)][1:-1]
-    if args.bit_act is not None and 'mobilenet' in args.arch:
-        all_layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.ReLU6)][1:-1]
-
-    del inf_model
-
-    layers = all_layers
     replacement_factory = {nn.ReLU: ActivationModuleWrapperPost,
                            nn.ReLU6: ActivationModuleWrapperPost,
                            nn.Conv2d: ParameterModuleWrapperPost}
@@ -116,11 +100,20 @@ def main(args):
         torch.cuda.manual_seed_all(args.seed)
         cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+
         inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                              batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
                              cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
 
-        mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
+        all_layers = []
+        if args.bit_weights is not None:
+            all_layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.Conv2d)][1:-1]
+        if args.bit_act is not None:
+            all_layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.ReLU)][1:-1]
+        if args.bit_act is not None and 'mobilenet' in args.arch:
+            all_layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.ReLU6)][1:-1]
+
+        mq = ModelQuantizer(inf_model.model, args, all_layers, replacement_factory)
         loss = inf_model.evaluate_calibration()
         point = mq.get_clipping()
 
