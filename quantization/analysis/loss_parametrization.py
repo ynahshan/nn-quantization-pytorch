@@ -117,26 +117,56 @@ def main(args):
         loss = inf_model.evaluate_calibration()
         point = mq.get_clipping()
 
-        # evaluate
-        # acc = inf_model.validate()
-
         del inf_model
         del mq
 
         return point, loss
 
-    ps = np.linspace(2, 4.5, 50)
+    random.seed(args.seed)
+    if not args.dont_fix_np_seed:
+        np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids,
+                         args.datapath,
+                         batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
+                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
+
+    all_layers = []
+    if args.bit_weights is not None:
+        all_layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.Conv2d)][1:-1]
+    if args.bit_act is not None:
+        all_layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.ReLU)][1:-1]
+    if args.bit_act is not None and 'mobilenet' in args.arch:
+        all_layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.ReLU6)][1:-1]
+
+    mq = ModelQuantizer(inf_model.model, args, all_layers, replacement_factory)
+
+    start_point, start_loss = eval_pnorm(2)
+    end_point, end_loss = eval_pnorm(4.5)
+    k = 50
+    step = (end_point - start_point) / k
+
+    print("start")
+    print(start_point)
+    print("end")
+    print(end_point)
     losses = []
     points = []
-    for p in tqdm(ps):
-        point, loss = eval_pnorm(p)
-        points.append(point.cpu().numpy())
+    for i in range(k+1):
+        point = start_point + i * step
+        mq.set_clipping(point, inf_model.device)
+        loss = inf_model.evaluate_calibration()
         losses.append(loss.item())
-        print("(p, loss) - ({}, {})".format(p, loss.item()))
+        points.append(point.cpu().numpy())
+        print("({}: loss) - {}".format(i, loss.item()))
 
-    f_name = "{}_W{}A{}_loss_vs_p_points.pkl".format(args.arch, args.bit_weights, args.bit_act)
+    f_name = "{}_W{}A{}_loss_vs_clipping.pkl".format(args.arch, args.bit_weights, args.bit_act)
     f = open(os.path.join(proj_root_dir, 'data', f_name), 'wb')
-    data = {'p': ps, 'loss': losses, 'points': points}
+    data = {'start': start_point.cpu().numpy(), 'end': end_point.cpu().numpy(), 'loss': losses, 'points': points}
     pickle.dump(data, f)
     f.close()
     print("Data saved to {}".format(f_name))

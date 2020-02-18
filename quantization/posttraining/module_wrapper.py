@@ -149,6 +149,13 @@ class ParameterModuleWrapperPost(nn.Module):
     def __enabled__(self):
         return self.enabled and self.active and self.bit_weights is not None
 
+    def bias_corr(self, x, xq):
+        bias_q = xq.view(xq.shape[0], -1).mean(-1)
+        bias_orig = x.view(x.shape[0], -1).mean(-1)
+        bcorr = bias_q - bias_orig
+
+        return xq - bcorr.view(bcorr.numel(), 1, 1, 1) if len(x.shape) == 4 else bcorr.view(bcorr.numel(), 1)
+
     def forward(self, *input):
         w = self.weight
         if self.__enabled__():
@@ -157,14 +164,7 @@ class ParameterModuleWrapperPost(nn.Module):
                 w = self.weight_quantization(self.weight)
 
                 if self.bcorr_w:
-                    bias_q = w.view(w.shape[0], -1).mean(-1)
-                    bias_q = bias_q.view(bias_q.numel(), 1, 1, 1) if len(w.shape) == 4 else bias_q.view(bias_q.numel(), 1)
-
-                    bias_orig = self.weight.view(self.weight.shape[0], -1).mean(-1)
-                    bias_orig = bias_orig.view(bias_orig.numel(), 1, 1, 1) if len(self.weight.shape) == 4 else bias_orig.view(
-                        bias_orig.numel(), 1)
-
-                    w = w - bias_q + bias_orig
+                    w = self.bias_corr(self.weight, w)
             else:
                 w = self.weight_q
 
