@@ -243,49 +243,15 @@ def main(args, ml_logger):
 
         return point, loss
 
-    ps = np.linspace(2, 3, 10)
-    losses = []
-    for p in tqdm(ps):
-        point, loss = eval_pnorm_on_calibration(p)
-        losses.append(loss.item())
-        print("(p, loss) - ({}, {})".format(p, loss.item()))
+    l2_point, l2_loss = eval_pnorm_on_calibration(2)
+    print("loss l2: {:.4f}".format(l2_loss.item()))
+    ml_logger.log_metric('Loss l2', l2_loss.item(), step='auto')
+    # l4_point, l4_loss = eval_pnorm_on_calibration(4)
+    # print("loss l4: {:.4f}".format(l4_loss.item()))
+    # ml_logger.log_metric('Loss l4', l4_loss.item(), step='auto')
 
-    # Interpolate optimal p
-    z = np.polyfit(ps, losses, 2)
-    y = np.poly1d(z)
-    p_intr = y.deriv().roots[0]
-    # loss_opt = y(p_intr)
-    print("p intr: {:.2f}".format(p_intr))
-    ml_logger.log_metric('p intr', p_intr, step='auto')
-
-    lp_point, lp_loss, lp_acc = eval_pnorm(p_intr)
-
-    print("loss p intr: {:.4f}".format(lp_loss.item()))
-    print("acc p intr: {:.4f}".format(lp_acc))
-    ml_logger.log_metric('Loss p intr', lp_loss.item(), step='auto')
-    ml_logger.log_metric('Acc p intr', lp_acc, step='auto')
-
-    global _eval_count, _min_loss
-    _min_loss = lp_loss.item()
-
-    # loss_best = np.min(losses)
-    # if loss_best < lp_loss:
-    #     p_intr = ps[np.argmin(losses)]
-    #     print("p best: {:.2f}".format(p_intr))
-    #     ml_logger.log_metric('p best', p_intr, step='auto')
-    #     lp_point, lp_loss, lp_acc = eval_pnorm(p_intr)
-    #     print("loss p best: {:.4f}".format(lp_loss.item()))
-    #     print("acc p best: {:.4f}".format(lp_acc))
-    #     ml_logger.log_metric('Loss p best', lp_loss.item(), step='auto')
-    #     ml_logger.log_metric('Acc p best', lp_acc, step='auto')
-
-    # idx = np.argmin([maxabs_loss, lp_loss])
-    # init = [max_point, lp_point][idx]
-
-    init = lp_point
-
-    args.qtype = 'lp_norm'
-    args.lp = p_intr
+    # args.qtype = 'lp_norm'
+    # args.lp = p_intr
     # Fix the seed
     random.seed(args.seed)
     if not args.dont_fix_np_seed:
@@ -295,8 +261,59 @@ def main(args, ml_logger):
     cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+    inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
+                         batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
+                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
+
+    mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
+
+    start_point = l2_point
+    end_point = 2*l2_point#l4_point
+    k = 10
+    step = (end_point - start_point) / k
+    print("start")
+    print(start_point)
+    print("end")
+    print(end_point)
+
+    losses = []
+    points = []
+    for i in range(k+1):
+        point = start_point + i * step
+        mq.set_clipping(point, inf_model.device)
+        loss = inf_model.evaluate_calibration()
+        losses.append(loss.item())
+        # points.append(point.cpu().numpy())
+        print("({}: loss) - {}".format(i, loss.item()))
+
+    del inf_model
+    del mq
+
+    # Interpolate optimal p
+    z = np.polyfit(np.arange(len(losses)), losses, 2)
+    y = np.poly1d(z)
+    p_opt = y.deriv().roots[0]
+    opt_point = start_point + p_opt * step
+    loss_opt = y(p_opt)
+
+    print("loss p intr: {:.4f}".format(loss_opt.item()))
+    ml_logger.log_metric('Loss p intr', loss_opt.item(), step='auto')
+
+    global _eval_count, _min_loss
+    _min_loss = loss_opt.item()
+
+    init = opt_point
+
     if enable_bcorr:
         args.bcorr_w = True
+    random.seed(args.seed)
+    if not args.dont_fix_np_seed:
+        np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
     inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
                          cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
