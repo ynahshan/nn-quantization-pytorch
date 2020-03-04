@@ -156,7 +156,6 @@ def main(args, ml_logger):
         args.bcorr_w = False
         enable_bcorr = True
 
-    args.qtype = 'max_static'
     # create model
     # Always enable shuffling to avoid issues where we get bad results due to weak statistics
     custom_resnet = True
@@ -179,129 +178,25 @@ def main(args, ml_logger):
                            nn.Conv2d: ParameterModuleWrapperPost}
 
     mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
-    maxabs_loss = inf_model.evaluate_calibration()
-    print("max loss: {:.4f}".format(maxabs_loss.item()))
-    max_point = mq.get_clipping()
-    ml_logger.log_metric('Loss max', maxabs_loss.item(), step='auto')
+    init_loss = inf_model.evaluate_calibration()
+    print("init loss: {:.4f}".format(init_loss.item()))
+    ml_logger.log_metric('Init loss', init_loss.item(), step='auto')
 
-    # evaluate
-    maxabs_acc = 0#inf_model.validate()
-    ml_logger.log_metric('Acc maxabs', maxabs_acc, step='auto')
-    data = {'max': {'alpha': max_point.cpu().numpy(), 'loss': maxabs_loss.item(), 'acc': maxabs_acc}}
+    acc = inf_model.validate()
+    ml_logger.log_metric('Acc init', acc, step='auto')
 
-    del inf_model
-    del mq
-
-    def eval_pnorm(p):
-        args.qtype = 'lp_norm'
-        args.lp = p
-        # Fix the seed
-        random.seed(args.seed)
-        if not args.dont_fix_np_seed:
-            np.random.seed(args.seed)
-        torch.manual_seed(args.seed)
-        torch.cuda.manual_seed_all(args.seed)
-        cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-        inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
-                             batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                             cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
-
-        mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
-        loss = inf_model.evaluate_calibration()
-        point = mq.get_clipping()
-
-        # evaluate
-        acc = inf_model.validate()
-
-        del inf_model
-        del mq
-
-        return point, loss, acc
-
-    def eval_pnorm_on_calibration(p):
-        args.qtype = 'lp_norm'
-        args.lp = p
-        # Fix the seed
-        random.seed(args.seed)
-        if not args.dont_fix_np_seed:
-            np.random.seed(args.seed)
-        torch.manual_seed(args.seed)
-        torch.cuda.manual_seed_all(args.seed)
-        cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-        inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
-                             batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                             cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
-
-        mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
-        loss = inf_model.evaluate_calibration()
-        point = mq.get_clipping()
-
-        del inf_model
-        del mq
-
-        return point, loss
-
-    ps = np.linspace(2, 4, 10)
-    losses = []
-    for p in tqdm(ps):
-        point, loss = eval_pnorm_on_calibration(p)
-        losses.append(loss.item())
-        print("(p, loss) - ({}, {})".format(p, loss.item()))
-
-    # Interpolate optimal p
-    z = np.polyfit(ps, losses, 2)
-    y = np.poly1d(z)
-    p_intr = y.deriv().roots[0]
-    # loss_opt = y(p_intr)
-    print("p intr: {:.2f}".format(p_intr))
-    ml_logger.log_metric('p intr', p_intr, step='auto')
-
-    lp_point, lp_loss, lp_acc = eval_pnorm(p_intr)
-
-    print("loss p intr: {:.4f}".format(lp_loss.item()))
-    print("acc p intr: {:.4f}".format(lp_acc))
-    ml_logger.log_metric('Init loss', lp_loss.item(), step='auto')
-    ml_logger.log_metric('Acc init', lp_acc, step='auto')
+    init = mq.get_clipping()
 
     global _eval_count, _min_loss
-    _min_loss = lp_loss.item()
+    _min_loss = init_loss.item()
 
-    # loss_best = np.min(losses)
-    # if loss_best < lp_loss:
-    #     p_intr = ps[np.argmin(losses)]
-    #     print("p best: {:.2f}".format(p_intr))
-    #     ml_logger.log_metric('p best', p_intr, step='auto')
-    #     lp_point, lp_loss, lp_acc = eval_pnorm(p_intr)
-    #     print("loss p best: {:.4f}".format(lp_loss.item()))
-    #     print("acc p best: {:.4f}".format(lp_acc))
-    #     ml_logger.log_metric('Loss p best', lp_loss.item(), step='auto')
-    #     ml_logger.log_metric('Acc p best', lp_acc, step='auto')
-
-    # idx = np.argmin([maxabs_loss, lp_loss])
-    # init = [max_point, lp_point][idx]
-
-    init = lp_point
-
-    args.qtype = 'lp_norm'
-    args.lp = p_intr
-    # Fix the seed
-    random.seed(args.seed)
-    if not args.dont_fix_np_seed:
-        np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
-    cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-    if enable_bcorr:
-        args.bcorr_w = True
-    inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
-                         batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
-
-    mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
+    # if enable_bcorr:
+    #     args.bcorr_w = True
+    # inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
+    #                      batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
+    #                      cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
+    #
+    # mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
 
     # run optimizer
     min_options = {}
@@ -340,14 +235,14 @@ def main(args, ml_logger):
     # evaluate
     acc = inf_model.validate()
     ml_logger.log_metric('Acc {}'.format(args.min_method), acc, step='auto')
-    data['powell'] = {'alpha': scales, 'loss': loss.item(), 'acc': acc}
+    # data['powell'] = {'alpha': scales, 'loss': loss.item(), 'acc': acc}
 
     # save scales
-    f_name = "scales_{}_W{}A{}.pkl".format(args.arch, args.bit_weights, args.bit_act)
-    f = open(os.path.join(proj_root_dir, 'data', f_name), 'wb')
-    pickle.dump(data, f)
-    f.close()
-    print("Data saved to {}".format(f_name))
+    # f_name = "scales_{}_W{}A{}.pkl".format(args.arch, args.bit_weights, args.bit_act)
+    # f = open(os.path.join(proj_root_dir, 'data', f_name), 'wb')
+    # pickle.dump(data, f)
+    # f.close()
+    # print("Data saved to {}".format(f_name))
 
 
 if __name__ == '__main__':

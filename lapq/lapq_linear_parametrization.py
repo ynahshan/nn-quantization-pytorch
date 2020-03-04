@@ -243,10 +243,10 @@ def main(args, ml_logger):
 
         return point, loss
 
-    l2_point, l2_loss = eval_pnorm_on_calibration(2)
-    print("loss l2: {:.4f}".format(l2_loss.item()))
-    ml_logger.log_metric('Loss l2', l2_loss.item(), step='auto')
-    # l4_point, l4_loss = eval_pnorm_on_calibration(4)
+    # l2_point, l2_loss = eval_pnorm_on_calibration(2)
+    # print("loss l2: {:.4f}".format(l2_loss.item()))
+    # ml_logger.log_metric('Loss l2', l2_loss.item(), step='auto')
+    # # l4_point, l4_loss = eval_pnorm_on_calibration(4)
     # print("loss l4: {:.4f}".format(l4_loss.item()))
     # ml_logger.log_metric('Loss l4', l4_loss.item(), step='auto')
 
@@ -254,8 +254,6 @@ def main(args, ml_logger):
     # args.lp = p_intr
     # Fix the seed
     random.seed(args.seed)
-    if not args.dont_fix_np_seed:
-        np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
     cudnn.deterministic = True
@@ -267,9 +265,12 @@ def main(args, ml_logger):
 
     mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
 
-    start_point = l2_point
-    end_point = 2*l2_point#l4_point
-    k = 10
+    opt_point = np.array([0.42811054, 1.27721779, 0.53149996, 1.51492159, 0.91115569,
+       1.17987683, 1.13352566, 1.5227828 , 0.67026185, 0.75535328,
+       0.54173654, 0.70824616, 0.44899457, 1.25257411, 0.68778409])
+    start_point = 0.6*opt_point
+    end_point = 2*opt_point
+    k = 100
     step = (end_point - start_point) / k
     print("start")
     print(start_point)
@@ -283,88 +284,97 @@ def main(args, ml_logger):
         mq.set_clipping(point, inf_model.device)
         loss = inf_model.evaluate_calibration()
         losses.append(loss.item())
-        # points.append(point.cpu().numpy())
+        points.append(point)
         print("({}: loss) - {}".format(i, loss.item()))
 
-    del inf_model
-    del mq
-
-    # Interpolate optimal p
-    z = np.polyfit(np.arange(len(losses)), losses, 2)
-    y = np.poly1d(z)
-    p_opt = y.deriv().roots[0]
-    opt_point = start_point + p_opt * step
-    loss_opt = y(p_opt)
-
-    print("loss p intr: {:.4f}".format(loss_opt.item()))
-    ml_logger.log_metric('Loss p intr', loss_opt.item(), step='auto')
-
-    global _eval_count, _min_loss
-    _min_loss = loss_opt.item()
-
-    init = opt_point
-
-    if enable_bcorr:
-        args.bcorr_w = True
-    random.seed(args.seed)
-    if not args.dont_fix_np_seed:
-        np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
-    cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-    inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
-                         batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
-                         cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
-
-    mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
-
-    # run optimizer
-    min_options = {}
-    if args.maxiter is not None:
-        min_options['maxiter'] = args.maxiter
-    if args.maxfev is not None:
-        min_options['maxfev'] = args.maxfev
-
-    _iter = count(0)
-
-    def local_search_callback(x):
-        it = next(_iter)
-        mq.set_clipping(x, inf_model.device)
-        loss = inf_model.evaluate_calibration()
-        print("\n[{}]: Local search callback".format(it))
-        print("loss: {:.4f}\n".format(loss.item()))
-        print(x)
-        ml_logger.log_metric('Loss {}'.format(args.min_method), loss.item(), step='auto')
-
-        # evaluate
-        acc = inf_model.validate()
-        ml_logger.log_metric('Acc {}'.format(args.min_method), acc, step='auto')
-
-    args.min_method = "Powell"
-    method = coord_descent if args.min_method == 'CD' else args.min_method
-    res = opt.minimize(lambda scales: evaluate_calibration_clipped(scales, inf_model, mq), init.cpu().numpy(),
-                       method=method, options=min_options, callback=local_search_callback)
-
-    print(res)
-
-    scales = res.x
-    mq.set_clipping(scales, inf_model.device)
-    loss = inf_model.evaluate_calibration()
-    ml_logger.log_metric('Loss {}'.format(args.min_method), loss.item(), step='auto')
-
-    # evaluate
-    acc = inf_model.validate()
-    ml_logger.log_metric('Acc {}'.format(args.min_method), acc, step='auto')
-    data['powell'] = {'alpha': scales, 'loss': loss.item(), 'acc': acc}
+    data = {'opt': opt_point, 'points': points, 'loss': losses}
 
     # save scales
-    f_name = "scales_{}_W{}A{}.pkl".format(args.arch, args.bit_weights, args.bit_act)
+    f_name = "quadratic_loss_{}_W{}A{}.pkl".format(args.arch, args.bit_weights, args.bit_act)
     f = open(os.path.join(proj_root_dir, 'data', f_name), 'wb')
     pickle.dump(data, f)
     f.close()
     print("Data saved to {}".format(f_name))
+
+    # del inf_model
+    # del mq
+    #
+    # # Interpolate optimal p
+    # z = np.polyfit(np.arange(len(losses)), losses, 2)
+    # y = np.poly1d(z)
+    # p_opt = y.deriv().roots[0]
+    # opt_point = start_point + p_opt * step
+    # loss_opt = y(p_opt)
+    #
+    # print("loss p intr: {:.4f}".format(loss_opt.item()))
+    # ml_logger.log_metric('Loss p intr', loss_opt.item(), step='auto')
+    #
+    # global _eval_count, _min_loss
+    # _min_loss = loss_opt.item()
+    #
+    # init = opt_point
+    #
+    # if enable_bcorr:
+    #     args.bcorr_w = True
+    # random.seed(args.seed)
+    # if not args.dont_fix_np_seed:
+    #     np.random.seed(args.seed)
+    # torch.manual_seed(args.seed)
+    # torch.cuda.manual_seed_all(args.seed)
+    # cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = False
+    #
+    # inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
+    #                      batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
+    #                      cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
+    #
+    # mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
+    #
+    # # run optimizer
+    # min_options = {}
+    # if args.maxiter is not None:
+    #     min_options['maxiter'] = args.maxiter
+    # if args.maxfev is not None:
+    #     min_options['maxfev'] = args.maxfev
+    #
+    # _iter = count(0)
+    #
+    # def local_search_callback(x):
+    #     it = next(_iter)
+    #     mq.set_clipping(x, inf_model.device)
+    #     loss = inf_model.evaluate_calibration()
+    #     print("\n[{}]: Local search callback".format(it))
+    #     print("loss: {:.4f}\n".format(loss.item()))
+    #     print(x)
+    #     ml_logger.log_metric('Loss {}'.format(args.min_method), loss.item(), step='auto')
+    #
+    #     # evaluate
+    #     acc = inf_model.validate()
+    #     ml_logger.log_metric('Acc {}'.format(args.min_method), acc, step='auto')
+    #
+    # args.min_method = "Powell"
+    # method = coord_descent if args.min_method == 'CD' else args.min_method
+    # res = opt.minimize(lambda scales: evaluate_calibration_clipped(scales, inf_model, mq), init.cpu().numpy(),
+    #                    method=method, options=min_options, callback=local_search_callback)
+    #
+    # print(res)
+    #
+    # scales = res.x
+    # mq.set_clipping(scales, inf_model.device)
+    # loss = inf_model.evaluate_calibration()
+    # ml_logger.log_metric('Loss {}'.format(args.min_method), loss.item(), step='auto')
+    #
+    # # evaluate
+    # acc = inf_model.validate()
+    # ml_logger.log_metric('Acc {}'.format(args.min_method), acc, step='auto')
+    # data['powell'] = {'alpha': scales, 'loss': loss.item(), 'acc': acc}
+    #
+    # # save scales
+    # f_name = "scales_{}_W{}A{}.pkl".format(args.arch, args.bit_weights, args.bit_act)
+    # f = open(os.path.join(proj_root_dir, 'data', f_name), 'wb')
+    # pickle.dump(data, f)
+    # f.close()
+    # print("Data saved to {}".format(f_name))
 
 
 if __name__ == '__main__':
