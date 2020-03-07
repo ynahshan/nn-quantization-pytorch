@@ -268,8 +268,8 @@ def main(args, ml_logger):
     opt_point = np.array([0.42811054, 1.27721779, 0.53149996, 1.51492159, 0.91115569,
        1.17987683, 1.13352566, 1.5227828 , 0.67026185, 0.75535328,
        0.54173654, 0.70824616, 0.44899457, 1.25257411, 0.68778409])
-    start_point = 0.6*opt_point
-    end_point = 2*opt_point
+    start_point = 0.8*opt_point
+    end_point = 1.5*opt_point
     k = 100
     step = (end_point - start_point) / k
     print("start")

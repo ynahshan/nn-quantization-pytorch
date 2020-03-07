@@ -156,6 +156,9 @@ def main(args, ml_logger):
         args.bcorr_w = False
         enable_bcorr = True
 
+    if args.init_method == 'random':
+        args.qtype = 'max_static'
+
     # create model
     # Always enable shuffling to avoid issues where we get bad results due to weak statistics
     custom_resnet = True
@@ -179,6 +182,16 @@ def main(args, ml_logger):
 
     mq = ModelQuantizer(inf_model.model, args, layers, replacement_factory)
     init_loss = inf_model.evaluate_calibration()
+
+    if args.init_method == 'random':
+        clip = mq.get_clipping()
+        for i, c in enumerate(clip.cpu()):
+            clip[i] = np.random.uniform(0, c)
+        print("Randomize initial clipping")
+        print(clip)
+        mq.set_clipping(clip, inf_model.device)
+        init_loss = inf_model.evaluate_calibration()
+
     print("init loss: {:.4f}".format(init_loss.item()))
     ml_logger.log_metric('Init loss', init_loss.item(), step='auto')
 
