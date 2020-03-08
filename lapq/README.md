@@ -46,7 +46,7 @@ python lapq/lapq_v2.py -a resnet18 -b 512 --dataset imagenet --pretrained --cust
 - To reproduce resnet50 experiment run:
 ```
 cd nn-quantization-pytorch
-python lapq/lapq_v2.py -a resnet50 --dataset imagenet -b 128 --pretrained --custom_resnet -ba 4 -bw 4 --min_method Powell -maxi 1 -cs 512
+python lapq/lapq_v2.py -a resnet50 --dataset imagenet -b 128 --pretrained --custom_resnet -ba 4 -bw 4 --min_method Powell -maxi 1 -cs 512 -bcw
 ```
 
 To reproduce results for other models change model name after "-a". All other arguments are same as resnet50.
