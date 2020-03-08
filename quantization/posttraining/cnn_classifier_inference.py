@@ -167,12 +167,17 @@ def main_worker(args, ml_logger):
 
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().to(device)
-
+    if 'inception' in args.arch and args.custom_inception:
+        first = 5
+        last = -1
+    else:
+        first = 5
+        last = -1
     if args.quantize:
         all_convs = [n for n, m in model.named_modules() if isinstance(m, nn.Conv2d)]
         all_relu = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU)]
         all_relu6 = [n for n, m in model.named_modules() if isinstance(m, nn.ReLU6)]
-        layers = all_relu[1:-1] + all_relu6[1:-1] + all_convs[1:-1]
+        layers = all_relu[first:last] + all_relu6[first:last] + all_convs[first:last]
         replacement_factory = {nn.ReLU: ActivationModuleWrapperPost,
                                nn.ReLU6: ActivationModuleWrapperPost,
                                nn.Conv2d: ParameterModuleWrapperPost}

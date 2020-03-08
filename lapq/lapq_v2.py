@@ -167,12 +167,18 @@ def main(args, ml_logger):
 
     layers = []
     # TODO: make it more generic
+    if 'inception' in args.arch and args.custom_inception:
+        first = 5
+        last = -1
+    else:
+        first = 5
+        last = -1
     if args.bit_weights is not None:
-        layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.Conv2d)][1:-1]
+        layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.Conv2d)][first:last]
     if args.bit_act is not None:
-        layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.ReLU)][1:-1]
+        layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.ReLU)][first:last]
     if args.bit_act is not None and 'mobilenet' in args.arch:
-        layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.ReLU6)][1:-1]
+        layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.ReLU6)][first:last]
 
     replacement_factory = {nn.ReLU: ActivationModuleWrapperPost,
                            nn.ReLU6: ActivationModuleWrapperPost,
