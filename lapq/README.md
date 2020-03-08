@@ -40,13 +40,13 @@ pip install torch torchvision bokeh pandas sklearn mlflow tqdm scipy
 - To reproduce resnet18 experiment run:
 ```
 cd nn-quantization-pytorch
-python lapq/layer_scale_optimization_opt.py -a resnet18 --dataset imagenet -b 256 --pretrained --custom_resnet -ba 2 --min_method Powell -maxi 2 -exp temp -cs 512
+python lapq/lapq_v2.py -a resnet18 -b 512 --dataset imagenet --pretrained --custom_resnet --min_method Powell -maxi 2 -cs 1024 -exp lapq_v2 -ba 4 -bw 4 -bcw
 ```
 
 - To reproduce resnet50 experiment run:
 ```
 cd nn-quantization-pytorch
-python lapq/layer_scale_optimization_opt.py -a resnet50 --dataset imagenet -b 128 --pretrained --custom_resnet -ba 2 --min_method Powell -maxi 1 -exp temp -cs 512
+python lapq/layer_scale_optimization_opt.py -a resnet50 --dataset imagenet -b 128 --pretrained --custom_resnet -ba -bw 4 --min_method Powell -maxi 1 -cs 512
 ```
 
 To reproduce results for other models change model name after "-a". All other arguments are same as resnet50.
