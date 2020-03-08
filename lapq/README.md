@@ -40,7 +40,7 @@ pip install torch torchvision bokeh pandas sklearn mlflow tqdm scipy
 - To reproduce resnet18 experiment run:
 ```
 cd nn-quantization-pytorch
-python lapq/lapq_v2.py -a resnet18 -b 512 --dataset imagenet --pretrained --custom_resnet --min_method Powell -maxi 2 -cs 1024 -exp lapq_v2 -ba 4 -bw 4 -bcw
+python lapq/lapq_v2.py -a resnet18 -b 512 --dataset imagenet --pretrained --custom_resnet --min_method Powell -maxi 2 -cs 512 -exp lapq_v2 -ba 4 -bw 4 -bcw
 ```
 
 - To reproduce resnet50 experiment run:
