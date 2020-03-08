@@ -49,4 +49,10 @@ cd nn-quantization-pytorch
 python lapq/lapq_v2.py -a resnet50 --dataset imagenet -b 128 --pretrained --custom_resnet -ba 4 -bw 4 --min_method Powell -maxi 1 -cs 512 -bcw
 ```
 
+- To reproduce inception_v3 experiment run:
+```
+cd nn-quantization-pytorch
+python lapq/lapq_v2.py -a inception_v3 --dataset imagenet -b 128 --pretrained --custom_inception -ba 4 -bw 4 --min_method Powell -maxi 1 -cs 512 -bcw
+```
+
 To reproduce results for other models change model name after "-a". All other arguments are same as resnet50.
