@@ -168,10 +168,10 @@ def main(args, ml_logger):
     layers = []
     # TODO: make it more generic
     if 'inception' in args.arch and args.custom_inception:
-        first = 5
+        first = 3
         last = -1
     else:
-        first = 5
+        first = 1
         last = -1
     if args.bit_weights is not None:
         layers += [n for n, m in inf_model.model.named_modules() if isinstance(m, nn.Conv2d)][first:last]
