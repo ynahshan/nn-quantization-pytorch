@@ -81,8 +81,8 @@ class ActivationModuleWrapperPost(nn.Module):
     def get_quantization(self):
         return self.out_quantization
 
-    def set_quantization(self, qtypy, kwargs, verbose=False):
-        self.out_quantization = qtypy(self, self.bits_out, symmetric=(not is_positive(self.wrapped_module)),
+    def set_quantization(self, qtype, kwargs, verbose=False):
+        self.out_quantization = qtype(self, self.bits_out, symmetric=(not is_positive(self.wrapped_module)),
                                       uint=True, kwargs=kwargs)
         if verbose:
             print("ActivationModuleWrapperPost - {} | {} | {}".format(self.name, str(self.out_quantization),
@@ -154,7 +154,7 @@ class ParameterModuleWrapperPost(nn.Module):
         bias_orig = x.view(x.shape[0], -1).mean(-1)
         bcorr = bias_q - bias_orig
 
-        return xq - bcorr.view(bcorr.numel(), 1, 1, 1) if len(x.shape) == 4 else bcorr.view(bcorr.numel(), 1)
+        return xq - bcorr.view(bcorr.numel(), 1, 1, 1) if len(x.shape) == 4 else xq - bcorr.view(bcorr.numel(), 1)
 
     def forward(self, *input):
         w = self.weight
@@ -175,8 +175,8 @@ class ParameterModuleWrapperPost(nn.Module):
     def get_quantization(self):
         return self.weight_quantization
 
-    def set_quantization(self, qtypy, kwargs, verbose=False):
-        self.weight_quantization = qtypy(self, self.bit_weights, symmetric=True, uint=True, kwargs=kwargs)
+    def set_quantization(self, qtype, kwargs, verbose=False):
+        self.weight_quantization = qtype(self, self.bit_weights, symmetric=True, uint=True, kwargs=kwargs)
         if verbose:
             print("ParameterModuleWrapperPost - {} | {} | {}".format(self.name, str(self.weight_quantization),
                                                                       str(kwargs['device'])))
