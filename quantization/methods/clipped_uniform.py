@@ -26,7 +26,7 @@ class FixedClipValueQuantization(ClippedUniformQuantization):
         self.clip_value = kwargs['clip_value']
         self.device = kwargs['device']
         with torch.no_grad():
-            self.register_buffer(self.alpha_param_name, torch.tensor([self.clip_value]).to(self.device))
+            self.register_buffer(self.alpha_param_name, torch.tensor([self.clip_value], dtype=torch.float32).to(self.device))
 
 
 class MaxAbsStaticQuantization(ClippedUniformQuantization):
