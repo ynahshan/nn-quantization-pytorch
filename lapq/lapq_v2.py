@@ -151,10 +151,10 @@ def main(args, ml_logger):
     if args.tag is not None:
         ml_logger.mlflow.log_param('tag', args.tag)
 
-    enable_bcorr = False
-    if args.bcorr_w:
-        args.bcorr_w = False
-        enable_bcorr = True
+    # enable_bcorr = False
+    # if args.bcorr_w:
+    #     args.bcorr_w = False
+    #     enable_bcorr = True
 
     args.qtype = 'max_static'
     # create model
@@ -301,8 +301,8 @@ def main(args, ml_logger):
     cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    if enable_bcorr:
-        args.bcorr_w = True
+    # if enable_bcorr:
+    #     args.bcorr_w = True
     inf_model = CnnModel(args.arch, custom_resnet, custom_inception, args.pretrained, args.dataset, args.gpu_ids, args.datapath,
                          batch_size=args.batch_size, shuffle=True, workers=args.workers, print_freq=args.print_freq,
                          cal_batch_size=args.cal_batch_size, cal_set_size=args.cal_set_size, args=args)
